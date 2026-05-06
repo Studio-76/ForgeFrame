@@ -1,75 +1,42 @@
-# Backend Performance Checklist
+# Backend Performance Checklist (PR Review)
 
-Use this checklist when reviewing or contributing performance-sensitive
-changes to the ForgeFrame backend.
+Before merging backend changes, verify:
 
-## Before Merging
+## Import / Startup
+- [ ] Import time does not regress (check `python -X importtime -c "from app.main import create_app"`)
+- [ ] New module imports are deferred to function scope when possible
+- [ ] No heavy work (DB queries, network calls, file I/O) happens at import time
 
-- [ ] **Import time** — Does the change add new top-level imports? Check
-      ``python3 -X importtime -c "import app.main" 2>&1 | tail -5``.  If the
-      cumulative import time increases by more than 50ms, consider lazy imports.
-- [ ] **Startup time** — Does the change add work to ``create_app()`` or
-      the lifespan hook?  Measure with ``time python3 -c "import app.main"``.
-- [ ] **Per-request allocations** — Does the change allocate objects inside a
-      route handler or dependency that could be created once and reused?
-      Watch for repeated ``Machine`` construction, ``SessionFactory`` creation,
-      or heavy ``BaseModel`` construction.
-- [ ] **N+1 queries** — Does the change loop over ORM results and access
-      relationships or joined data?  Load everything in one query.
-- [ ] **Query count** — Is the new endpoint making more than 15 SQL queries
-      per request?  Consider eager-loading or batch queries.
-- [ ] **Slow queries** — Are any queries not using an index?  Check
-      ``EXPLAIN ANALYZE`` on hot WHERE / JOIN / ORDER BY clauses.
-- [ ] **Serialisation** — Does the change call ``model_dump(mode="json")``
-      on a deeply nested model inside a list comprehension?  Consider
-      serialising once to ``dict`` and reusing, or using ``model_dump`` with
-      ``exclude`` / ``include`` to skip unused fields.
-- [ ] **Async blocking** — Does the change add a synchronous ``time.sleep()``,
-      blocking I/O, or CPU-bound work in an ``async def`` route?  Move it to
-      ``run_in_executor`` or a background task.
-- [ ] **Middleware** — Is the new middleware running on every request?
-      Verify it is not doing expensive work on lightweight routes (health
-      checks, static files).
-- [ ] **Logging** — Are ``f"..."`` strings or ``json.dumps()`` used in logging
-      statements that run on hot paths?  Use ``%s``-style lazy formatting.
-- [ ] **State machine** — Is ``ExecutionStateMachineValidator`` being
-      constructed more than once per request?  It uses per-thread caching
-      via ``threading.local()`` — verify the cache is hit.
-- [ ] **Connection pool** — Are you adding a new ``create_engine()`` call?
-      Configure ``pool_size``, ``max_overflow``, and ``pool_recycle``
-      appropriately.  Each engine adds up to 15 concurrent connections.
+## Database
+- [ ] New endpoints do not introduce N+1 query patterns
+- [ ] Eager loading (`joinedload`, `selectinload`) used only when related data is actually needed
+- [ ] Projection queries used where full ORM objects are unnecessary
+- [ ] Connection pool settings remain appropriate for expected load
+- [ ] Sessions are properly closed (context managers or `finally` blocks)
 
-## Budgets (configurable via ``FORGEFRAME_PERF_BUDGET_*``)
+## Pydantic
+- [ ] Response models defined with `response_model` for OpenAPI schema generation and validation
+- [ ] `TypeAdapter` reused for repeated validation of the same schema
+- [ ] Expensive computed fields (`@computed_field`) have `@cached_property` or precomputation
+- [ ] Nested model serialization is not deeper than necessary
 
-| Metric | p99 Budget | How to Measure |
-|--------|-----------|----------------|
-| App import + startup | 5 s | ``time python3 -c "import app.main"`` |
-| RSS memory after startup | 150 MB | ``python3 -c "import os,app.main; print(open(f'/proc/{os.getpid()}/status').read().split('VmRSS:')[1].split()[0])"`` |
-| Request p99 latency | 2000 ms | ``python3 -m pytest benchmarks/ -k perf -v`` |
-| Query count / endpoint | 20 | Add ``sqlalchemy.engine`` logging at INFO |
-| Slow query threshold | 100 ms | Add SQL timing listener |
-| State-machine validation | 20 ms | Internal timer in ``check_transition_allowed`` |
-| Response serialisation | 200 ms | Profile ``model_dump(mode="json")`` on large collections |
+## Async
+- [ ] Async routes (`async def`) contain no blocking I/O (sync DB, file, network, CPU-heavy ops)
+- [ ] Blocking work uses `run_in_executor` or is moved to background tasks
+- [ ] No unbounded concurrency (task/thread spawning without limits)
+- [ ] Background tasks do not starve request handlers
 
-## Severity Guide
+## State Machine
+- [ ] No rebuilding of `transitions.Machine` instances per request (use per-thread cache)
+- [ ] Guards contain no database or network calls
+- [ ] Transition semantics unchanged by optimization
 
-- **Critical** — Import time > 10 s, per-request query count > 100,
-      memory > 500 MB, any N+1 in a hot path.
-- **Warning** — Import time > 6 s, per-request query count > 30,
-      slow queries > 200 ms, serialisation > 500 ms.
-- **Notice** — Marginal increases within budget that affect cold-start
-      latency but not steady-state throughput.
+## Logging / Observability
+- [ ] Debug/trace logs guarded by level check (`if logger.isEnabledFor(...)`)
+- [ ] No large payload logging on hot paths
+- [ ] Diagnostic/snapshot/evidence payloads built only when requested
+- [ ] Structured log fields use lazy interpolation
 
-## Running the Guard
-
-```bash
-python3 -m pytest benchmarks/ -v
-```
-
-The CI guard runs on every PR and fails when budgets are exceeded.
-Set custom budgets via:
-
-```bash
-export FORGEFRAME_PERF_BUDGET_STARTUP_P95=3.0
-python3 -m pytest benchmarks/ -v
-```
+## Performance Budgets
+- [ ] Run `python benchmarks/check_budgets.py` and confirm budgets pass
+- [ ] If budget increase is needed, document the reason in the PR

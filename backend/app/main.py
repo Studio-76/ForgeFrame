@@ -27,6 +27,7 @@ from app.readiness import (
     reset_runtime_readiness_state,
 )
 from app.settings.config import get_settings
+from app.telemetry.response_cache import ResponseCacheMiddleware, response_cache_enabled
 
 
 class StartupValidationGateMiddleware:
@@ -250,6 +251,8 @@ def create_app() -> FastAPI:
         return response
 
     app.add_middleware(StartupValidationGateMiddleware, default_api_base=settings.api_base)
+    if response_cache_enabled():
+        app.add_middleware(ResponseCacheMiddleware)
     app.include_router(build_runtime_router(settings.api_base))
     app.include_router(build_admin_router())
     _mount_frontend(app, Path(settings.frontend_dist_path))
