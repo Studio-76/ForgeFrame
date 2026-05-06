@@ -75,7 +75,7 @@ export function CreateManualForm({
   };
 
   return (
-    <article className="fg-card ff-learning-manual-form ff-learning-tron-frame">
+    <article className="fg-card ff-learning-manual-form ff-frame-accent">
       <div className="fg-section-heading ff-learning-manual-header">
         <div>
           <p className="ff-learning-kicker">Manual learning intake</p>

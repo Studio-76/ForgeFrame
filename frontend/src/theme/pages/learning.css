@@ -4,45 +4,6 @@
  * confirmation-gated promotion, guided manual flow.
  * ────────────────────────────────────────────── */
 
-/* ─── Shared Tron/business frame primitives ─── */
-.ff-learning-tron-frame {
-  position: relative;
-  overflow: hidden;
-  border-color: color-mix(
-    in srgb,
-    var(--fg-color-accent) 34%,
-    var(--fg-color-border-default)
-  );
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--fg-color-accent) 8%, transparent),
-      transparent 28%
-    ),
-    var(--fg-color-surface-default);
-}
-
-.ff-learning-tron-frame::before,
-.ff-learning-tron-frame::after {
-  position: absolute;
-  width: 34px;
-  height: 34px;
-  content: "";
-  pointer-events: none;
-}
-
-.ff-learning-tron-frame::before {
-  inset: 0 auto auto 0;
-  border-top: 1px solid var(--fg-color-accent);
-  border-left: 1px solid var(--fg-color-accent);
-}
-
-.ff-learning-tron-frame::after {
-  inset: auto 0 0 auto;
-  border-right: 1px solid var(--fg-color-accent);
-  border-bottom: 1px solid var(--fg-color-accent);
-}
-
 .ff-learning-kicker,
 .ff-learning-stat-label {
   margin: 0;
@@ -53,6 +14,7 @@
   text-transform: uppercase;
 }
 
+/* ─── Status LED ─── */
 .ff-learning-status-led {
   display: inline-flex;
   align-items: center;
@@ -248,6 +210,7 @@
   font-size: var(--fg-type-size-meta);
 }
 
+/* ─── Action buttons ─── */
 .ff-learning-primary-action {
   padding: var(--fg-space-2) var(--fg-space-4);
   background: var(--fg-color-action-primary);
@@ -392,18 +355,6 @@
   color: var(--fg-color-text-primary);
   border-bottom-color: var(--fg-color-action-primary);
   font-weight: 600;
-}
-
-.ff-learning-tab[data-tone="success"].ff-learning-tab-active {
-  border-bottom-color: var(--fg-color-status-success);
-}
-
-.ff-learning-tab[data-tone="warning"].ff-learning-tab-active {
-  border-bottom-color: var(--fg-color-status-warning);
-}
-
-.ff-learning-tab[data-tone="danger"].ff-learning-tab-active {
-  border-bottom-color: var(--fg-color-status-danger);
 }
 
 .ff-learning-empty-list {

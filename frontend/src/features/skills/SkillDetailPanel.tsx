@@ -8,6 +8,8 @@
 import { type FormEvent } from "react";
 import { Link } from "react-router-dom";
 
+import { Button, StatusBadge } from "../../components/ui";
+
 import type {
   AgentSummary,
   SkillDetail as SkillDetailType,
@@ -113,9 +115,9 @@ export function SkillDetailPanel({
 }: SkillDetailPanelProps) {
   if (!detail) {
     return (
-      <article className="fg-card ff-skills-detail-panel ff-skills-tron-frame">
+      <article className="fg-card ff-skills-detail-panel ff-frame-accent">
         <div className="ff-skills-detail-placeholder">
-          <span className="ff-skills-kicker">Skill detail</span>
+          <span className="fg-muted text-meta font-bold uppercase tracking-widest">Skill detail</span>
           <p className="ff-skills-detail-placeholder-text">
             Select a skill from the registry to inspect its status, instructions,
             provenance, activations, and usage telemetry.
@@ -131,44 +133,37 @@ export function SkillDetailPanel({
   const isArchived = detail.status === "archived";
 
   return (
-    <article className="fg-card ff-skills-detail-panel ff-skills-tron-frame">
+    <article className="fg-card ff-skills-detail-panel ff-frame-accent">
       {/* ── Header ── */}
       <div className="ff-skills-detail-header">
         <div>
-          <p className="ff-skills-kicker">Skill</p>
+          <p className="fg-muted text-meta font-bold uppercase tracking-widest">Skill</p>
           <h3>{detail.display_name}</h3>
         </div>
-        <span className="ff-skills-pill ff-skills-pill-id">{detail.skill_id}</span>
+        <span className="text-meta text-muted font-mono">{detail.skill_id}</span>
       </div>
 
       {/* ── Status row ── */}
       <div className="ff-skills-detail-status-row">
-        <span className="ff-skills-pill" data-tone={statusTone(detail.status)}>
+        <StatusBadge tone={statusTone(detail.status)}>
           {statusLabel(detail.status)}
-        </span>
-        <span
-          className="ff-skills-pill"
-          data-tone={provenanceTone(detail.provenance_summary.kind)}
-        >
+        </StatusBadge>
+        <StatusBadge tone={provenanceTone(detail.provenance_summary.kind)}>
           {detail.provenance_summary.label}
-        </span>
-        <span className="ff-skills-pill" data-tone="neutral">{detail.scope_label}</span>
-        <span
-          className="ff-skills-pill"
-          data-tone={outcomeTone(detail.last_outcome)}
-        >
+        </StatusBadge>
+        <StatusBadge tone="neutral">{detail.scope_label}</StatusBadge>
+        <StatusBadge tone={outcomeTone(detail.last_outcome)}>
           Last: {outcomeLabel(detail.last_outcome)}
-        </span>
+        </StatusBadge>
       </div>
 
       {/* ── Approval / lifecycle info ── */}
       <div className="ff-skills-detail-approval">
-        <span
-          className="ff-skills-status-led"
-          data-state={needsReview ? "warning" : isActive ? "success" : "idle"}
+        <StatusBadge
+          tone={needsReview ? "warning" : isActive ? "success" : "neutral"}
         >
           {approvalLabel(detail.approval.posture)}
-        </span>
+        </StatusBadge>
       </div>
 
       {/* ── Summary ── */}
@@ -206,13 +201,13 @@ export function SkillDetailPanel({
             <p>
               <strong>Origin:</strong> {provenanceKindLabel(detail.provenance_summary.kind)}
             </p>
-            <p className="ff-skills-table-meta">
+            <p className="text-tertiary text-micro">
               {detail.provenance_summary.detail ?? "No additional detail recorded."}
             </p>
             <div className="ff-skills-detail-links">
               {typeof detail.provenance.learning_event_id === "string" ? (
                 <Link
-                  className="ff-skills-nav-link"
+                  className="text-accent text-meta font-semibold no-underline hover:underline"
                   to={buildLearningPath({
                     instanceId,
                     eventId: detail.provenance.learning_event_id,
@@ -223,7 +218,7 @@ export function SkillDetailPanel({
               ) : null}
               {typeof detail.provenance.memory_id === "string" ? (
                 <Link
-                  className="ff-skills-nav-link"
+                  className="text-accent text-meta font-semibold no-underline hover:underline"
                   to={buildMemoryPath({
                     instanceId,
                     memoryId: detail.provenance.memory_id,
@@ -234,7 +229,7 @@ export function SkillDetailPanel({
               ) : null}
               {typeof detail.provenance.source_id === "string" ? (
                 <Link
-                  className="ff-skills-nav-link"
+                  className="text-accent text-meta font-semibold no-underline hover:underline"
                   to={buildKnowledgeSourcePath({
                     instanceId,
                     sourceId: detail.provenance.source_id,
@@ -245,7 +240,7 @@ export function SkillDetailPanel({
               ) : null}
               {detail.scope_agent ? (
                 <Link
-                  className="ff-skills-nav-link"
+                  className="text-accent text-meta font-semibold no-underline hover:underline"
                   to={buildAgentsPath({
                     instanceId,
                     agentId: detail.scope_agent.record_id,
@@ -261,8 +256,8 @@ export function SkillDetailPanel({
         {/* ── Versions ── */}
         <details className="ff-skills-detail-details">
           <summary>Versions ({detail.versions.length})</summary>
-          <div className="ff-skills-table-container">
-            <table className="ff-skills-table" aria-label="Skill versions">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-body" aria-label="Skill versions">
               <thead>
                 <tr>
                   <th>Version</th>
@@ -277,9 +272,9 @@ export function SkillDetailPanel({
                   <tr key={version.version_id}>
                     <td>v{version.version_number}</td>
                     <td>
-                      <span className="ff-skills-pill" data-tone={statusTone(version.status)}>
-                        {statusLabel(version.status)}
-                      </span>
+                        <StatusBadge tone={statusTone(version.status)}>
+                          {statusLabel(version.status)}
+                        </StatusBadge>
                     </td>
                     <td>{version.summary}</td>
                     <td>
@@ -304,8 +299,8 @@ export function SkillDetailPanel({
         {/* ── Activations ── */}
         <details className="ff-skills-detail-details">
           <summary>Activations ({detail.activations.length})</summary>
-          <div className="ff-skills-table-container">
-            <table className="ff-skills-table" aria-label="Skill activations">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-body" aria-label="Skill activations">
               <thead>
                 <tr>
                   <th>Status</th>
@@ -318,7 +313,7 @@ export function SkillDetailPanel({
               <tbody>
                 {detail.activations.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="ff-skills-table-empty">
+                    <td colSpan={5} className="text-tertiary text-center italic p-6">
                       No activations recorded.
                     </td>
                   </tr>
@@ -326,18 +321,17 @@ export function SkillDetailPanel({
                   detail.activations.map((activation) => (
                     <tr key={activation.activation_id}>
                       <td>
-                        <span
-                          className="ff-skills-pill"
-                          data-tone={
-                            activation.status === "active"
-                              ? "success"
-                              : activation.status === "inactive"
-                                ? "warning"
-                                : "danger"
-                          }
-                        >
-                          {activation.status}
-                        </span>
+                          <StatusBadge
+                            tone={
+                              activation.status === "active"
+                                ? "success"
+                                : activation.status === "inactive"
+                                  ? "warning"
+                                  : "danger"
+                            }
+                          >
+                            {activation.status}
+                          </StatusBadge>
                       </td>
                       <td>{activation.scope_label}</td>
                       <td>{activation.version_id}</td>
@@ -362,23 +356,23 @@ export function SkillDetailPanel({
           <div className="ff-skills-detail-telemetry-strip">
             <div>
               <strong>{detail.telemetry_summary.usage_count}</strong>
-              <span className="ff-skills-table-meta">Total uses</span>
+              <span className="text-tertiary text-micro">Total uses</span>
             </div>
             <div>
               <strong className="ff-skills-stat-success">{detail.telemetry_summary.success_count}</strong>
-              <span className="ff-skills-table-meta">Success</span>
+              <span className="text-tertiary text-micro">Success</span>
             </div>
             <div>
               <strong className="ff-skills-stat-warning">{detail.telemetry_summary.blocked_count}</strong>
-              <span className="ff-skills-table-meta">Blocked</span>
+              <span className="text-tertiary text-micro">Blocked</span>
             </div>
             <div>
               <strong className="ff-skills-stat-danger">{detail.telemetry_summary.error_count}</strong>
-              <span className="ff-skills-table-meta">Errors</span>
+              <span className="text-tertiary text-micro">Errors</span>
             </div>
           </div>
-          <div className="ff-skills-table-container">
-            <table className="ff-skills-table" aria-label="Recent skill usage">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-body" aria-label="Recent skill usage">
               <thead>
                 <tr>
                   <th>When</th>
@@ -391,7 +385,7 @@ export function SkillDetailPanel({
               <tbody>
                 {detail.recent_usage.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="ff-skills-table-empty">
+                    <td colSpan={5} className="text-tertiary text-center italic p-6">
                       No usage recorded.
                     </td>
                   </tr>
@@ -401,16 +395,13 @@ export function SkillDetailPanel({
                       <td>{formatTimestamp(usage.created_at)}</td>
                       <td>v{usage.version_number ?? "?"}</td>
                       <td>
-                        <span
-                          className="ff-skills-pill"
-                          data-tone={outcomeTone(usage.outcome)}
-                        >
-                          {outcomeLabel(usage.outcome)}
-                        </span>
+                          <StatusBadge tone={outcomeTone(usage.outcome)}>
+                            {outcomeLabel(usage.outcome)}
+                          </StatusBadge>
                       </td>
                       <td>
                         {usage.run_id ? (
-                          <Link className="ff-skills-nav-link" to={buildRunPath(instanceId, usage.run_id)}>
+                          <Link className="text-accent text-meta font-semibold no-underline hover:underline" to={buildRunPath(instanceId, usage.run_id)}>
                             run {usage.run_id}
                           </Link>
                         ) : (
@@ -420,7 +411,7 @@ export function SkillDetailPanel({
                           <>
                             <br />
                             <Link
-                              className="ff-skills-nav-link"
+                              className="text-accent text-meta font-semibold no-underline hover:underline"
                               to={buildConversationPath({
                                 instanceId,
                                 conversationId: usage.conversation_id,
@@ -752,9 +743,9 @@ export function SkillDetailPanel({
             </details>
 
             <div className="ff-skills-create-actions">
-              <button type="submit" disabled={!canMutate || savingUpdate}>
+              <Button type="submit" variant="primary" isDisabled={!canMutate || savingUpdate}>
                 {savingUpdate ? "Saving\u2026" : "Save changes"}
-              </button>
+              </Button>
             </div>
           </form>
         </details>
@@ -763,19 +754,19 @@ export function SkillDetailPanel({
         <div className="ff-skills-lifecycle-actions">
           <h4>Lifecycle actions</h4>
           <div className="ff-skills-lifecycle-buttons">
-            <button
-              type="button"
-              className="ff-skills-lifecycle-btn"
-              disabled={!canMutate || isArchived || isActive}
-              onClick={() => {
-                setEditForm((current) => ({ ...current, status: "review" }));
-                // Programmatically submit the edit form to trigger handleUpdate
-                const editFormElement = document.querySelector<HTMLFormElement>(".ff-skills-detail-form");
-                if (editFormElement) editFormElement.requestSubmit();
-              }}
-            >
-              Submit for review
-            </button>
+          <Button
+            variant="secondary"
+            size="sm"
+            isDisabled={!canMutate || isArchived || isActive}
+            onPress={() => {
+              setEditForm((current) => ({ ...current, status: "review" }));
+              // Programmatically submit the edit form to trigger handleUpdate
+              const editFormElement = document.querySelector<HTMLFormElement>(".ff-skills-detail-form");
+              if (editFormElement) editFormElement.requestSubmit();
+            }}
+          >
+            Submit for review
+          </Button>
 
             <form className="ff-skills-lifecycle-form" onSubmit={handleActivate}>
               <div className="ff-skills-lifecycle-activate-fields">
@@ -812,25 +803,26 @@ export function SkillDetailPanel({
                   )}
                 </select>
               </div>
-              <button
+              <Button
                 type="submit"
-                className="ff-skills-lifecycle-btn ff-skills-lifecycle-btn-primary"
-                disabled={!canMutate || isArchived || savingActivate}
+                variant="primary"
+                size="sm"
+                isDisabled={!canMutate || isArchived || savingActivate}
               >
                 {savingActivate ? "Activating\u2026" : "Activate skill"}
-              </button>
+              </Button>
             </form>
 
-            <button
-              type="button"
-              className="ff-skills-lifecycle-btn ff-skills-lifecycle-btn-danger"
-              disabled={!canMutate || savingArchive}
-              onClick={() => void handleArchive()}
+            <Button
+              variant="destructive"
+              size="sm"
+              isDisabled={!canMutate || savingArchive}
+              onPress={() => void handleArchive()}
             >
               {savingArchive ? "Archiving\u2026" : "Archive skill"}
-            </button>
+            </Button>
           </div>
-          <p className="ff-skills-table-meta">
+          <p className="text-tertiary text-micro">
             Archiving keeps versions, activations, and telemetry. It is not a delete action.
           </p>
         </div>
@@ -985,9 +977,9 @@ export function SkillDetailPanel({
               />
             </details>
             <div className="ff-skills-create-actions">
-              <button type="submit" disabled={!canMutate || savingUsage}>
+              <Button type="submit" variant="primary" isDisabled={!canMutate || savingUsage}>
                 {savingUsage ? "Recording\u2026" : "Record usage"}
-              </button>
+              </Button>
             </div>
           </form>
         </details>

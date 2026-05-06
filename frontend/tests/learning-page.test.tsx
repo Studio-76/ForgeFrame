@@ -468,7 +468,7 @@ describe("learning page", () => {
 
     let manualScope = getManualFormScope();
     expect(manualScope, "Manual form article should be in DOM").toBeTruthy();
-    expect(manualScope?.classList.contains("ff-learning-tron-frame")).toBe(true);
+    expect(manualScope?.classList.contains("ff-frame-accent")).toBe(true);
     expect(container.textContent).toContain("Manual learning intake");
     expect(container.textContent).toContain("Draft intake");
     expect(container.querySelector(".ff-learning-manual-header")).toBeTruthy();

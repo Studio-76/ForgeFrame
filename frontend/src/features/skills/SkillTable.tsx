@@ -7,6 +7,7 @@
  * @packageDocumentation
  */
 
+import { StatusBadge } from "../../components/ui";
 import type { SkillSummary } from "../../api/domain";
 import type { LoadState } from "../../pages/workInteractionPageSupport";
 import { formatTimestamp, outcomeLabel, outcomeTone, statusLabel, statusTone } from "./utils";
@@ -34,16 +35,16 @@ export function SkillTable({
 }: SkillTableProps) {
   if (listState === "loading") {
     return (
-      <div className="ff-skills-table-container">
-        <p className="ff-skills-table-status">Loading skills\u2026</p>
+      <div className="overflow-x-auto">
+        <p className="p-4 text-muted text-meta">Loading skills\u2026</p>
       </div>
     );
   }
 
   if (listState === "error") {
     return (
-      <div className="ff-skills-table-container">
-        <p className="ff-skills-table-status ff-skills-table-status-error">
+      <div className="overflow-x-auto">
+        <p className="p-4 text-muted text-meta text-danger">
           Failed to load skills. Try adjusting filters.
         </p>
       </div>
@@ -52,35 +53,39 @@ export function SkillTable({
 
   if (skills.length === 0) {
     return (
-      <div className="ff-skills-table-container">
-        <p className="ff-skills-table-status">No skills match the current filters.</p>
+      <div className="overflow-x-auto">
+        <p className="p-4 text-muted text-meta">No skills match the current filters.</p>
       </div>
     );
   }
 
   return (
-    <div className="ff-skills-table-container">
-      <table className="ff-skills-table" aria-label="Skill registry">
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-body" aria-label="Skill registry">
         <thead>
-          <tr>
-            <th>Name</th>
-            <th>Version</th>
-            <th>Status</th>
-            <th>Scope</th>
-            <th>Last used</th>
-            <th>Outcome</th>
+          <tr className="border-b border-border">
+            <th className="p-2 text-left text-meta font-bold uppercase tracking-wider text-muted whitespace-nowrap">Name</th>
+            <th className="p-2 text-left text-meta font-bold uppercase tracking-wider text-muted whitespace-nowrap">Version</th>
+            <th className="p-2 text-left text-meta font-bold uppercase tracking-wider text-muted whitespace-nowrap">Status</th>
+            <th className="p-2 text-left text-meta font-bold uppercase tracking-wider text-muted whitespace-nowrap">Scope</th>
+            <th className="p-2 text-left text-meta font-bold uppercase tracking-wider text-muted whitespace-nowrap">Last used</th>
+            <th className="p-2 text-left text-meta font-bold uppercase tracking-wider text-muted whitespace-nowrap">Outcome</th>
           </tr>
         </thead>
         <tbody>
           {skills.map((skill) => (
             <tr
               key={skill.skill_id}
-              className={skill.skill_id === selectedSkillId ? "ff-skills-table-row-selected" : ""}
+              className={`cursor-pointer transition-colors duration-100 hover:bg-accent/5 ${
+                skill.skill_id === selectedSkillId
+                  ? "bg-accent/10 outline outline-1 outline-accent -outline-offset-1"
+                  : ""
+              }`}
             >
-              <td>
+              <td className="p-2 border-b border-border-subtle align-top">
                 <button
                   type="button"
-                  className="ff-skills-table-trigger"
+                  className="border-0 p-0 bg-transparent text-accent text-body font-semibold cursor-pointer text-left hover:underline"
                   onClick={() =>
                     updateRoute((next) =>
                       next.set("skillId", skill.skill_id),
@@ -89,42 +94,39 @@ export function SkillTable({
                 >
                   {skill.display_name}
                 </button>
-                <div className="ff-skills-table-meta">
+                <div className="text-tertiary text-micro leading-relaxed">
                   {skill.provenance_summary.label}
                 </div>
               </td>
-              <td>
+              <td className="p-2 border-b border-border-subtle align-top">
                 <div>v{skill.current_version_number}</div>
-                <div className="ff-skills-table-meta">
+                <div className="text-tertiary text-micro leading-relaxed">
                   {formatTimestamp(skill.updated_at)}
                 </div>
               </td>
-              <td>
-                <span className="ff-skills-pill" data-tone={statusTone(skill.status)}>
+              <td className="p-2 border-b border-border-subtle align-top">
+                <StatusBadge tone={statusTone(skill.status)}>
                   {statusLabel(skill.status)}
-                </span>
-                <div className="ff-skills-table-meta">{skill.approval.label}</div>
+                </StatusBadge>
+                <div className="text-tertiary text-micro leading-relaxed">{skill.approval.label}</div>
               </td>
-              <td>
+              <td className="p-2 border-b border-border-subtle align-top">
                 <div>{skill.scope_label}</div>
-                <div className="ff-skills-table-meta">
+                <div className="text-tertiary text-micro leading-relaxed">
                   {skill.active_activation_count} activation{skill.active_activation_count === 1 ? "" : "s"}
                 </div>
               </td>
-              <td>
+              <td className="p-2 border-b border-border-subtle align-top">
                 <div>{formatTimestamp(skill.last_used_at, "Never used")}</div>
-                <div className="ff-skills-table-meta">
+                <div className="text-tertiary text-micro leading-relaxed">
                   {skill.telemetry_summary.usage_count} use{skill.telemetry_summary.usage_count === 1 ? "" : "s"}
                 </div>
               </td>
-              <td>
-                <span
-                  className="ff-skills-pill"
-                  data-tone={outcomeTone(skill.last_outcome)}
-                >
+              <td className="p-2 border-b border-border-subtle align-top">
+                <StatusBadge tone={outcomeTone(skill.last_outcome)}>
                   {outcomeLabel(skill.last_outcome)}
-                </span>
-                <div className="ff-skills-table-meta">
+                </StatusBadge>
+                <div className="text-tertiary text-micro leading-relaxed">
                   {skill.telemetry_summary.success_count} ok /{" "}
                   {skill.telemetry_summary.blocked_count} blocked /{" "}
                   {skill.telemetry_summary.error_count} err

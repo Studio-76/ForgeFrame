@@ -10,6 +10,8 @@
 
 import { type FormEvent } from "react";
 
+import { Button, StatusBadge } from "../../components/ui";
+
 import type {
   AgentSummary,
   SkillProvenanceKind,
@@ -58,15 +60,13 @@ export function CreateSkillPanel({
   onCancel,
 }: CreateSkillPanelProps) {
   return (
-    <article className="fg-card ff-skills-create-panel ff-skills-tron-frame">
+    <article className="fg-card ff-skills-create-panel ff-frame-accent">
       <div className="ff-skills-create-header">
         <div>
-          <p className="ff-skills-kicker">Create skill</p>
+          <p className="fg-muted text-meta font-bold uppercase tracking-widest">Create skill</p>
           <h3>New skill</h3>
         </div>
-        <span className="ff-skills-status-led" data-state="success">
-          Draft
-        </span>
+        <StatusBadge tone="success">Draft</StatusBadge>
       </div>
       <p className="ff-skills-create-note">
         Creating a skill saves it as a draft. Activation is a separate review
@@ -445,10 +445,10 @@ export function CreateSkillPanel({
 
         {/* ── Actions ── */}
         <div className="ff-skills-create-actions">
-          <button
+          <Button
             type="submit"
-            className="ff-skills-primary-action"
-            disabled={
+            variant="primary"
+            isDisabled={
               !canMutate ||
               savingCreate ||
               !normalizeText(createForm.displayName) ||
@@ -456,15 +456,14 @@ export function CreateSkillPanel({
             }
           >
             {savingCreate ? "Creating skill\u2026" : "Save draft"}
-          </button>
-          <button
-            type="button"
-            className="ff-skills-secondary-action"
-            onClick={onCancel}
-            disabled={savingCreate}
+          </Button>
+          <Button
+            variant="secondary"
+            onPress={onCancel}
+            isDisabled={savingCreate}
           >
             Cancel
-          </button>
+          </Button>
         </div>
       </form>
     </article>

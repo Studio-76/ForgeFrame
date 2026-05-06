@@ -73,7 +73,7 @@ export function LearningSummaryHero({
   const scanStateLabel = scanningPatterns ? "Running" : lastScanSummary;
 
   return (
-    <article className="fg-card ff-learning-summary ff-learning-tron-frame">
+    <article className="fg-card ff-learning-summary ff-frame-accent">
       <div className="ff-learning-summary-header">
         <div>
           <p className="ff-learning-kicker">Learning review queue</p>

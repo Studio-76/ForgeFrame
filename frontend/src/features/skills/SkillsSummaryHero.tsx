@@ -5,6 +5,9 @@
  * @packageDocumentation
  */
 
+import { Button } from "../../components/ui";
+import { StatusBadge } from "../../components/ui";
+
 /** Props for SkillsSummaryHero. */
 export interface SkillsSummaryHeroProps {
   /** Total number of skills in the registry. */
@@ -52,10 +55,10 @@ export function SkillsSummaryHero({
       : "All skills are in good shape";
 
   return (
-    <article className="fg-card ff-skills-hero ff-skills-tron-frame">
+    <article className="fg-card ff-skills-hero ff-frame-accent">
       <div className="ff-skills-hero-header">
         <div>
-          <p className="ff-skills-kicker">Skill registry</p>
+          <p className="fg-muted text-meta font-bold uppercase tracking-widest">Skill registry</p>
           <h3>
             {loading
               ? "Loading skills\u2026"
@@ -64,12 +67,11 @@ export function SkillsSummaryHero({
                 : "No skills registered"}
           </h3>
         </div>
-        <span
-          className="ff-skills-status-led"
-          data-state={attentionCount > 0 ? "warning" : "success"}
+        <StatusBadge
+          tone={attentionCount > 0 ? "warning" : "success"}
         >
           {attentionCount > 0 ? "Attention required" : "Registry clear"}
-        </span>
+        </StatusBadge>
       </div>
 
       {hasSkills && !loading && (
@@ -113,13 +115,9 @@ export function SkillsSummaryHero({
             <span className="ff-skills-admin-status">Select an instance</span>
           ) : null}
           {canMutate && hasInstance && (
-            <button
-              type="button"
-              className="ff-skills-primary-action"
-              onClick={onCreateSkill}
-            >
+            <Button variant="primary" size="sm" onPress={onCreateSkill}>
               Create skill
-            </button>
+            </Button>
           )}
         </div>
       </div>
