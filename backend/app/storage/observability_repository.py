@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from pydantic import ValidationError
-from sqlalchemy import JSON, DateTime, Integer, String, create_engine, select, text
+from sqlalchemy import JSON, DateTime, Integer, String, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
 from app.settings.config import Settings
+from app.storage.db import build_postgres_engine
 from app.storage.harness_repository import Base
 from app.tenancy import effective_tenant_filter
 from app.usage.events import ErrorEvent, HealthEvent, UsageEvent
@@ -150,9 +151,7 @@ class FileObservabilityRepository:
 
 class PostgresObservabilityRepository:
     def __init__(self, database_url: str):
-        if not database_url.startswith("postgresql"):
-            raise ValueError("Observability PostgreSQL backend requires a postgresql:// URL.")
-        self._engine = create_engine(database_url, pool_pre_ping=True)
+        self._engine = build_postgres_engine(database_url)
         Base.metadata.create_all(self._engine)
         self._session_factory = sessionmaker(self._engine, autoflush=False, expire_on_commit=False)
 

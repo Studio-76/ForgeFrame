@@ -21,6 +21,7 @@ from app.instances.service import get_instance_service
 from app.providers import ProviderRegistry
 from app.responses.service import ResponsesService
 from app.settings.config import Settings, get_settings
+from app.storage.db import get_pool_config
 from app.storage.models import Base
 
 
@@ -57,7 +58,15 @@ def _resolve_execution_database_url(settings: Settings) -> str:
 def get_execution_session_factory():
     settings = get_settings()
     database_url = _resolve_execution_database_url(settings)
-    engine = create_engine(database_url, pool_pre_ping=database_url.startswith("postgresql"))
+    is_pg = database_url.startswith("postgresql")
+    if is_pg:
+        engine = create_engine(
+            database_url,
+            pool_pre_ping=True,
+            **get_pool_config(),
+        )
+    else:
+        engine = create_engine(database_url)
     Base.metadata.create_all(engine)
     return sessionmaker(engine, autoflush=False, expire_on_commit=False)
 

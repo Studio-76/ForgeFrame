@@ -16,7 +16,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    create_engine,
     delete,
     select,
     text,
@@ -34,6 +33,7 @@ from app.governance.models import (
     RuntimeKeyRecord,
 )
 from app.settings.config import Settings
+from app.storage.db import build_postgres_engine
 from app.storage.harness_repository import Base
 from app.tenancy import DEFAULT_BOOTSTRAP_TENANT_ID, normalize_tenant_id
 
@@ -485,9 +485,7 @@ class PostgresGovernanceRepository:
         relational_dual_write_enabled: bool = True,
         relational_reads_enabled: bool = True,
     ):
-        if not database_url.startswith("postgresql"):
-            raise ValueError("Governance PostgreSQL backend requires a postgresql:// URL.")
-        self._engine = create_engine(database_url, pool_pre_ping=True)
+        self._engine = build_postgres_engine(database_url)
         # Storage migrations own the PostgreSQL schema. Calling create_all() here can
         # mint an unconstrained shadow schema before the real migrations run.
         self._session_factory = sessionmaker(self._engine, autoflush=False, expire_on_commit=False)

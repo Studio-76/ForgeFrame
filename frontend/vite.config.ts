@@ -49,31 +49,41 @@ export default defineConfig({
         /**
          * Manual chunk splitting strategy:
          *
-         * - `vendor-react` (193 kB): React + React-DOM — the two heaviest deps,
-         *   stable across versions, excellent HTTP cache residency.
-         * - `vendor-libs` (179 kB): Router, TanStack Query, Zustand, TanStack Table,
-         *   React Aria internals — all third-party logic deps that change only on upgrade.
-         * - `vendor-aria` (54 kB): react-aria + react-stately — UI primitive layer,
-         *   changes independently from app code.
-         * - `index` (78 kB): app shell — changes on every deploy.
+         * - `vendor-react`: React + React-DOM — stable and always app-shell loaded.
+         * - `vendor-router`: React Router — stable and app-shell loaded.
+         * - `vendor-query`: TanStack Query — stable and app-shell loaded.
+         * - `vendor-state`: Zustand — small client-state runtime, app-shell loaded.
+         * - `vendor-aria`: React Aria/Stately — UI primitive layer used by shell chrome.
+         * - `vendor-table`: TanStack Table — route-loaded with table surfaces only.
          *
-         * This produces 3 vendor chunks + 1 app shell + N route chunks = ~4 base chunks.
-         * With HTTP/2 multiplexing this is well within the sweet spot.
+         * Keeping TanStack Table out of the router/query chunk prevents table code from
+         * being preloaded for the initial app shell while retaining cache-friendly vendor
+         * chunks for long-lived dependencies.
          */
         manualChunks(id: string) {
           if (id.includes("node_modules/react-dom") || id.includes("node_modules/react/")) {
             return "vendor-react";
           }
           if (
-            id.includes("node_modules/react-router") ||
-            id.includes("node_modules/@tanstack/react-query") ||
-            id.includes("node_modules/@tanstack/query-core") ||
             id.includes("node_modules/@tanstack/react-table") ||
-            id.includes("node_modules/zustand") ||
-            id.includes("node_modules/internmap") ||
-            id.includes("node_modules/d3-")
+            id.includes("node_modules/@tanstack/table-core")
           ) {
-            return "vendor-libs";
+            return "vendor-table";
+          }
+          if (
+            id.includes("node_modules/@tanstack/react-query") ||
+            id.includes("node_modules/@tanstack/query-core")
+          ) {
+            return "vendor-query";
+          }
+          if (
+            id.includes("node_modules/react-router/") ||
+            id.includes("node_modules/react-router-dom/")
+          ) {
+            return "vendor-router";
+          }
+          if (id.includes("node_modules/zustand")) {
+            return "vendor-state";
           }
           if (
             id.includes("node_modules/react-aria") ||

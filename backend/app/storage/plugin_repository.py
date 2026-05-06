@@ -18,7 +18,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    create_engine,
     select,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -30,6 +29,7 @@ from app.plugins.models import (
     PluginRegistryStateRecord,
 )
 from app.settings.config import Settings
+from app.storage.db import build_postgres_engine
 from app.storage.harness_repository import Base
 
 _PLUGIN_STATE_SCHEMA_VERSION = 1
@@ -210,9 +210,7 @@ class FilePluginRepository:
 
 class PostgresPluginRepository:
     def __init__(self, database_url: str):
-        if not database_url.startswith("postgresql"):
-            raise ValueError("Plugin PostgreSQL backend requires a postgresql:// URL.")
-        self._engine = create_engine(database_url, pool_pre_ping=True)
+        self._engine = build_postgres_engine(database_url)
         Base.metadata.create_all(self._engine)
         self._session_factory = sessionmaker(self._engine, autoflush=False, expire_on_commit=False)
 
