@@ -190,7 +190,7 @@ export function DispatchPage() {
     <IncidentResponsePage
       eyebrow="Operations"
       title="Dispatch"
-      description="Inspect the technical worker and lease layer below runs and queues: active leases, stalled attempts, outbox pressure, and lease reconciliation."
+      description="Worker leases, stalled attempts, outbox pressure, and reconciliation."
       summaryItems={summaryItems}
       diagnostics={diagnosticsContent}
       diagnosticsTitle="Dispatch diagnostics"
@@ -267,7 +267,7 @@ export function DispatchPage() {
             <div className="fg-panel-heading">
               <div>
                 <h3>Outbox Pressure</h3>
-                <p className="fg-muted">Outbox pressure comes from persisted publish-state truth, not inferred runtime logs.</p>
+                <p className="fg-muted">Persisted publish-state pressure, not inferred runtime logs.</p>
               </div>
             </div>
             {outboxStates.length === 0 ? (
@@ -297,7 +297,7 @@ export function DispatchPage() {
             <div className="fg-panel-heading">
               <div>
                 <h3>Reconciliation</h3>
-                <p className="fg-muted">Lease reconciliation turns expired dispatch leases into explicit quarantined or timed-out run truth.</p>
+                <p className="fg-muted">Expired dispatch leases become quarantined or timed-out run truth.</p>
               </div>
               <span className="fg-pill" data-tone={canMutate ? "success" : "warning"}>
                 {canMutate ? "Mutations enabled" : "Permission blocker"}

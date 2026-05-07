@@ -467,7 +467,7 @@ export function NotificationsPage() {
         noIncidents
         noIncidentsConfig={{
           title: "Checking access",
-          description: "ForgeFrame is restoring notification scope before exposing delivery truth.",
+          description: "Restoring notification scope before exposing delivery state.",
         }}
       />
     );
@@ -478,11 +478,11 @@ export function NotificationsPage() {
       <IncidentResponsePage
         eyebrow="Work Interaction"
         title="Notifications"
-        description="Operator or admin access is required to inspect notification delivery state."
+        description="Operator or admin access required to inspect notification state."
         noIncidents
         noIncidentsConfig={{
           title: "Operator or admin required",
-          description: "ForgeFrame does not render a cosmetic notification shell when the session cannot inspect delivery truth.",
+          description: "Session cannot inspect notification delivery state.",
         }}
       />
     );
@@ -492,7 +492,7 @@ export function NotificationsPage() {
     <IncidentResponsePage
       eyebrow="Work Interaction"
       title="Notifications"
-      description="Control notification preview, queue, retry, rejection, and fallback routing."
+      description="Preview, queue, retry, rejection, and fallback routing."
       attentionItems={attentionItems}
       summaryItems={summaryItems}
       selectedItemContent={selectedItemContent}

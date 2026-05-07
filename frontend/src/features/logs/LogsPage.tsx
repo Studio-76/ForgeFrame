@@ -211,7 +211,7 @@ export function LogsPage() {
       <PageHeader
         eyebrow="Operations"
         title="Incidents and Observability"
-        description="Incident response, logs, activity, audit history, and diagnostics separated into clear operator modes."
+        description="Incidents, logs, activity, audit history, and diagnostics."
       />
 
       {/* ── Scope indicator ── */}

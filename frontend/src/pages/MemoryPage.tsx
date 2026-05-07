@@ -115,7 +115,7 @@ export function MemoryPage() {
       <RegistryManagementPage
         eyebrow="Work Interaction"
         title="Memory"
-        description="ForgeFrame is restoring governed memory truth."
+        description="Restoring governed memory truth."
       />
     );
   }
@@ -125,10 +125,10 @@ export function MemoryPage() {
       <RegistryManagementPage
         eyebrow="Work Interaction"
         title="Memory"
-        description="This route is reserved for operators and admins who can inspect real memory governance."
+        description="Operator or admin access required to inspect memory governance."
         isEmpty
         emptyTitle="Memory access unavailable"
-        emptyDescription="This session does not hold the required permissions to inspect memory governance records."
+        emptyDescription="Session lacks permissions to inspect memory governance records."
       />
     );
   }
@@ -137,7 +137,7 @@ export function MemoryPage() {
     <RegistryManagementPage
       eyebrow="Work Interaction"
       title="Memory"
-      description="Governed long-term truth with explicit scope, trust, review posture, and strict separation between durable memory, boot candidates, working context, and retired records."
+      description="Governed long-term truth: scope, trust, review, and lifecycle separation."
       scope={scope}
       attentionItems={attentionItems}
       summaryItems={summaryItems}

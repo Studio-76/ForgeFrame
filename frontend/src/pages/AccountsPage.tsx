@@ -392,7 +392,7 @@ export function AccountsPage() {
       <RegistryManagementPage
         eyebrow="Governance"
         title="Accounts"
-        description="Runtime and client identities with lifecycle truth, provider bindings, instance scope, and linked key exposure."
+        description="Runtime and client identities with lifecycle truth, provider bindings, and scope."
         scope={scope}
         attentionItems={attentionItems}
         summaryItems={summaryItems}

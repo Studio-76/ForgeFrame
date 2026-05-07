@@ -566,8 +566,8 @@ describe("observability pages", () => {
 
     expect(container.textContent).toContain("Health Status");
     expect(container.textContent).toContain("TLS / FQDN");
-    expect(container.textContent).toContain("Signal Path");
-    expect(container.textContent).toContain("Provider Needing Review");
+    expect(container.textContent).toContain("Signal path");
+    expect(container.textContent).toContain("Providers needing review");
     expect(container.textContent).toContain("public_fqdn_tls_evidence");
     const oauthButtons = Array.from(container.querySelectorAll("button")).filter((btn) => btn.textContent?.trim() === "Review OAuth targets");
     expect(oauthButtons.length).toBeGreaterThan(0);

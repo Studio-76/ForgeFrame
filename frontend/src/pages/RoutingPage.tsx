@@ -368,7 +368,7 @@ export function RoutingPage() {
       <RegistryManagementPage
         eyebrow="Routing"
         title="Smart Execution Routing"
-        description="Request classification, target selection stages, budget and circuit guardrails, and explainable decision history \u2014 in one focused surface."
+        description="Policy, budget, circuit guardrails, and decision history."
         isEmpty
         emptyTitle="Routing review unavailable"
         emptyDescription="This session does not hold routing.read on the active instance scope."
@@ -380,7 +380,7 @@ export function RoutingPage() {
     <RegistryManagementPage
       eyebrow="Routing"
       title="Smart Execution Routing"
-      description="Request classification, target selection stages, budget and circuit guardrails, and explainable decision history \u2014 in one focused surface."
+      description="Policy, budget, circuit guardrails, and decision history."
       scope={scopeConfig}
       attentionItems={attentionItems}
       summaryItems={summaryItems}

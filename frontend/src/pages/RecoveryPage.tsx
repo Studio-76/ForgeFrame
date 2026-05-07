@@ -1341,11 +1341,11 @@ export function RecoveryPage() {
       <IncidentResponsePage
         eyebrow="Operations"
         title="Recovery / Backup / Restore"
-        description="Recovery posture for backup coverage, restore proof, upgrade integrity, and source identity."
+        description="Backup coverage, restore proof, and upgrade integrity."
         noIncidents
         noIncidentsConfig={{
           title: "Loading recovery posture",
-          description: "Loading coverage, backup evidence, restore evidence, and upgrade posture.",
+          description: "Loading coverage, backup evidence, restore evidence.",
         }}
       />
     );
@@ -1408,7 +1408,7 @@ export function RecoveryPage() {
     <IncidentResponsePage
       eyebrow="Operations"
       title="Recovery / Backup / Restore"
-      description="Recovery is an operator surface for backup coverage, restore proof, upgrade integrity, and source identity."
+      description="Backup coverage, restore proof, upgrade integrity, and source identity."
       attentionItems={attentionItems}
       summaryItems={summaryItems}
       diagnostics={diagnosticsContent}
@@ -1450,7 +1450,7 @@ export function RecoveryPage() {
           <div className="ff-operator-main">
             <DataTable
               title="Coverage summary"
-              description="Protected data classes with backup targets and risk posture."
+              description="Protected data classes, backup targets, and risk posture."
               data={coverageRows}
               columns={coverageColumns}
               rowKey={(row) => row.key}
@@ -1654,7 +1654,7 @@ export function RecoveryPage() {
           <div className="ff-operator-sidebar">
             <DetailPanel
               title={selectedPolicy?.policy.label ?? "Backup import"}
-              description="Import a backup manifest with immediate validation, then inspect the accepted evidence result."
+              description="Import backup manifest with validation and evidence result."
               status={backupValidation.valid ? "report valid" : "report invalid"}
               statusTone={backupValidation.valid ? "success" : "danger"}
               statusKey={backupValidation.valid ? "ready" : "blocked"}
@@ -1746,7 +1746,7 @@ export function RecoveryPage() {
           <div className="ff-operator-sidebar">
             <DetailPanel
               title={selectedPolicy?.policy.label ?? "Restore import"}
-              description="Import a restore report with immediate validation and visible result."
+              description="Import restore report with validation and visible result."
               status={restoreValidation.valid ? "report valid" : "report invalid"}
               statusTone={restoreValidation.valid ? "success" : "danger"}
               statusKey={restoreValidation.valid ? "ready" : "blocked"}

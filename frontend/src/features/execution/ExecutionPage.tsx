@@ -482,11 +482,11 @@ export function ExecutionPage() {
       <IncidentResponsePage
         eyebrow="Operations"
         title="Execution Run Review"
-        description="Instance-scoped execution truth and replay admission stay hidden until ForgeFrame confirms the current session role."
+        description="Checking session role before exposing execution data."
         noIncidents
         noIncidentsConfig={{
           title: "Checking access",
-          description: "ForgeFrame verifies the session role before it opens instance-scoped execution list/detail truth or replay admission.",
+          description: "Verifying session role for execution list/detail and replay access.",
         }}
       />
     );
@@ -497,11 +497,11 @@ export function ExecutionPage() {
       <IncidentResponsePage
         eyebrow="Operations"
         title="Execution Run Review"
-        description="This route is reserved for operator and admin sessions."
+        description="Operator or admin access required."
         noIncidents
         noIncidentsConfig={{
           title: "Operator or admin required",
-          description: "Viewer sessions can still inspect operational signals elsewhere, but ForgeFrame blocks instance-scoped execution list/detail APIs and replay on this route.",
+          description: "Viewer sessions cannot access execution list/detail APIs.",
         }}
       />
     );
@@ -594,7 +594,7 @@ export function ExecutionPage() {
     <IncidentResponsePage
       eyebrow="Operations"
       title="Execution Run Review"
-      description="Inspect background execution truth, approval waits, dead-letter evidence, and replay admission."
+      description="Execution truth, approval waits, dead-letter evidence, and replay admission."
       attentionItems={attentionItems}
       summaryItems={instanceId && summaryItems ? summaryItems : undefined}
       diagnostics={
