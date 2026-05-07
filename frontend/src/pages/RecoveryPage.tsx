@@ -1516,18 +1516,18 @@ export function RecoveryPage() {
             >
               {selectedCoverage ? (
                 <div className="fg-stack">
-                  <section className="fg-subcard">
-                    <h4>Coverage truth</h4>
+                  <div>
+                    <h4 className="font-semibold text-sm mb-1">Coverage truth</h4>
                     <p>Protected by: {selectedCoverage.policyLabels}</p>
                     <p>Protected status: {selectedCoverage.protectedLabel}</p>
                     <p>Backup target: {selectedCoverage.backupTargets}</p>
                     <p>Last backup: {formatTimestamp(selectedCoverage.lastBackupAt)}</p>
                     <p>Last restore test: {formatTimestamp(selectedCoverage.lastRestoreAt)}</p>
                     <p>Risk: {selectedCoverage.blocker}</p>
-                  </section>
+                  </div>
 
-                  <section className="fg-subcard">
-                    <h4>Next action</h4>
+                  <div>
+                    <h4 className="font-semibold text-sm mb-1">Next action</h4>
                     <p>{selectedCoverage.statusKey === "ready" ? "Keep the latest backup and restore cadence current." : "Open the relevant section below and close the missing proof."}</p>
                     <div className="flex flex-wrap gap-2 mt-2">
                       <Button variant="navigation" density="compact" onPress={() => setActiveSection("policies")}>
@@ -1540,7 +1540,7 @@ export function RecoveryPage() {
                         Review Restore Evidence
                       </Button>
                     </div>
-                  </section>
+                  </div>
 
                   <AdvancedDiagnostics
                     title="Coverage notes"
@@ -1591,8 +1591,8 @@ export function RecoveryPage() {
             >
               {selectedPolicy ? (
                 <div className="fg-stack">
-                  <section className="fg-subcard">
-                    <h4>Policy contract</h4>
+                  <div>
+                    <h4 className="font-semibold text-sm mb-1">Policy contract</h4>
                     <p>Target class: {selectedPolicy.policy.target_class}</p>
                     <p>Target label: {selectedPolicy.policy.target_label || "n/a"}</p>
                     <p>Target locator: {selectedPolicy.validation.target_locator || "n/a"}</p>
@@ -1600,14 +1600,14 @@ export function RecoveryPage() {
                     <p>Backup age budget: {selectedPolicy.policy.max_backup_age_hours}h</p>
                     <p>Restore age budget: {selectedPolicy.policy.max_restore_age_hours}h</p>
                     <p>Protected classes: {selectedPolicy.policy.protected_data_classes.join(", ")}</p>
-                  </section>
+                  </div>
 
-                  <section className="fg-subcard">
-                    <h4>Restore contract</h4>
+                  <div>
+                    <h4 className="font-semibold text-sm mb-1">Restore contract</h4>
                     <p>{selectedPolicy.latest_restore ? `Latest restore test: ${selectedPolicy.latest_restore.created_at}` : "Restore never tested for this policy."}</p>
                     <p>{selectedPolicy.latest_backup ? `Latest backup: ${selectedPolicy.latest_backup.created_at}` : "No backup evidence imported yet."}</p>
                     <p>{selectedPolicy.latest_backup && !selectedPolicy.latest_restore ? "Backup exists, but this policy is still blocked until a restore test is imported." : "Backup and restore posture are evaluated separately."}</p>
-                  </section>
+                  </div>
 
                   <AdvancedDiagnostics
                     title="Policy validation and mismatches"
@@ -1660,9 +1660,9 @@ export function RecoveryPage() {
               statusKey={backupValidation.valid ? "ready" : "blocked"}
               sticky
             >
-              <div className="fg-stack">
-                <section className="fg-subcard">
-                  <h4>Import backup manifest</h4>
+              <div>
+                <div>
+                  <h4 className="font-semibold text-sm mb-1">Import backup manifest</h4>
                   <form className="fg-stack" onSubmit={handleBackupImport}>
                     <label>
                       Policy
@@ -1702,7 +1702,7 @@ export function RecoveryPage() {
                       </Button>
                     </div>
                   </form>
-                </section>
+                </div>
 
                 {backupImportResult ? (
                   <AdvancedDiagnostics
@@ -1752,10 +1752,10 @@ export function RecoveryPage() {
               statusKey={restoreValidation.valid ? "ready" : "blocked"}
               sticky
             >
-              <div className="fg-stack">
-                <section className="fg-subcard">
-                  <h4>Import restore report</h4>
-                  <p>{selectedPolicy?.latest_restore ? `Latest restore proof: ${selectedPolicy.latest_restore.created_at}` : "No restore proof exists for the selected policy yet."}</p>
+              <div>
+                <div>
+                  <h4 className="font-semibold text-sm mb-1">Import restore report</h4>
+                  <p className="mb-2">{selectedPolicy?.latest_restore ? `Latest restore proof: ${selectedPolicy.latest_restore.created_at}` : "No restore proof exists for the selected policy yet."}</p>
                   <form className="fg-stack" onSubmit={handleRestoreImport}>
                     <label>
                       Policy
@@ -1795,7 +1795,7 @@ export function RecoveryPage() {
                       </Button>
                     </div>
                   </form>
-                </section>
+                </div>
 
                 {restoreImportResult ? (
                   <AdvancedDiagnostics
@@ -1841,9 +1841,9 @@ export function RecoveryPage() {
               statusKey={statusKeyForRuntimeStatus(overview.upgrade_posture.runtime_status)}
               sticky
             >
-              <div className="fg-stack">
-                <section className="fg-subcard">
-                  <h4>Upgrade posture</h4>
+              <div>
+                <div>
+                  <h4 className="font-semibold text-sm mb-1">Upgrade posture</h4>
                   <p>Latest release: {overview.upgrade_posture.latest_release_id ?? "missing"}</p>
                   <p>Target version: {overview.upgrade_posture.latest_target_version ?? "missing"}</p>
                   <p>No-loss proof: {String(overview.upgrade_posture.latest_no_loss_ok)}</p>
@@ -1851,10 +1851,10 @@ export function RecoveryPage() {
                   <p>Source identity stable: {String(overview.upgrade_posture.latest_source_identity_stable)}</p>
                   <p>Blockers: {overview.upgrade_posture.blockers.join(", ") || "none"}</p>
                   <p>Cross-check route: <Link className="fg-nav-link" to={CONTROL_PLANE_ROUTES.releaseValidation}>View Release / Validation</Link></p>
-                </section>
+                </div>
 
-                <section className="fg-subcard">
-                  <h4>Import upgrade proof</h4>
+                <div>
+                  <h4 className="font-semibold text-sm mb-1">Import upgrade proof</h4>
                   <form className="fg-stack" onSubmit={handleUpgradeImport}>
                     <label>
                       Upgrade proof JSON
@@ -1875,7 +1875,7 @@ export function RecoveryPage() {
                       </Button>
                     </div>
                   </form>
-                </section>
+                </div>
 
                 {upgradeImportResult ? (
                   <AdvancedDiagnostics

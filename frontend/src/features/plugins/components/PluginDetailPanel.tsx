@@ -53,20 +53,20 @@ export function PluginDetailPanel({
       sticky
     >
       <div className="fg-stack">
-        <section className="fg-subcard">
-          <h4>Plugin vs skill boundary</h4>
+        <div>
+          <h4 className="font-semibold text-sm mb-1">Plugin vs skill boundary</h4>
           <p>Plugin: extends product surfaces or system functions.</p>
           <p>Skill: extends procedural behavior for an agent or workflow.</p>
-        </section>
-        <section className="fg-subcard">
-          <h4>Registry truth</h4>
+        </div>
+        <div>
+          <h4 className="font-semibold text-sm mb-1">Registry truth</h4>
           <p>{selectedPlugin.status_summary}</p>
           <p>Capabilities: {selectedPlugin.capabilities.join(", ") || "none"}</p>
           <p>UI slots: {selectedPlugin.ui_slots.join(", ") || "none"}</p>
           <p>API mounts: {selectedPlugin.api_mounts.join(", ") || "none"}</p>
-        </section>
-        <section className="fg-subcard">
-          <h4>Security posture</h4>
+        </div>
+        <div>
+          <h4 className="font-semibold text-sm mb-1">Security posture</h4>
           {securityWarnings(selectedPlugin).length > 0 ? (
             <ul className="fg-list">
               {securityWarnings(selectedPlugin).map((warning) => (
@@ -76,13 +76,13 @@ export function PluginDetailPanel({
           ) : (
             <p className="fg-muted">No active security warning is visible for this plugin.</p>
           )}
-        </section>
-        <section className="fg-subcard">
-          <h4>Activation truth</h4>
+        </div>
+        <div>
+          <h4 className="font-semibold text-sm mb-1">Activation truth</h4>
           <p>Bound instances: {selectedPlugin.bound_instance_ids.join(", ") || "none"}</p>
           <p>Enabled instances: {selectedPlugin.enabled_instance_ids.join(", ") || "none"}</p>
           <p>Current instance binding: {selectedPlugin.binding ? (selectedPlugin.binding.enabled ? "enabled" : "disabled") : "not bound"}</p>
-        </section>
+        </div>
         <AdvancedDiagnostics title="Selected plugin raw truth" description="Raw effective config stays collapsed so the main panels remain operational first." status="advanced" statusTone="neutral">
           <pre>{formatJson(selectedPlugin)}</pre>
         </AdvancedDiagnostics>

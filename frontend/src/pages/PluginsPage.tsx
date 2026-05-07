@@ -129,12 +129,10 @@ export function PluginsPage() {
 
   // ── Scope selector dialog ──
   const scopeSelectorContent = showScopeSelector ? (
-    <div className="fg-card">
-      <div className="fg-panel-heading">
-        <div>
-          <h3>Active instance scope</h3>
-          <p className="fg-muted">Instance activation is separate from registry truth. Choose the scope first, then decide whether to review catalog, manifest, or binding.</p>
-        </div>
+    <div className="p-3 border border-border rounded-md bg-surface mb-3">
+      <div className="mb-2">
+        <h3 className="font-semibold">Active instance scope</h3>
+        <p className="fg-muted text-sm">Choose the scope first, then decide whether to review catalog, manifest, or binding.</p>
       </div>
       <div className="fg-inline-form">
         <label>

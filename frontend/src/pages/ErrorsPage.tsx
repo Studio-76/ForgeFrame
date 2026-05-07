@@ -483,9 +483,9 @@ export function ErrorsPage() {
                   </div>
                 </div>
 
-                <div className="fg-card-grid">
-                  <article className="fg-subcard">
-                    <h4>Alerts</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-semibold text-sm mb-1">Alerts</h4>
                     <ul className="fg-list">
                       {activeAlerts.length === 0 ? <li>No active alert is visible.</li> : null}
                       {activeAlerts.map((alert, index) => (
@@ -494,10 +494,10 @@ export function ErrorsPage() {
                         </li>
                       ))}
                     </ul>
-                  </article>
+                  </div>
 
-                  <article className="fg-subcard">
-                    <h4>Operability checks</h4>
+                  <div>
+                    <h4 className="font-semibold text-sm mb-1">Operability checks</h4>
                     <ul className="fg-list">
                       {(overview.operability.checks ?? []).map((check, index) => (
                         <li key={`${stringifyValue(check.id)}-${index}`}>
@@ -505,7 +505,7 @@ export function ErrorsPage() {
                         </li>
                       ))}
                     </ul>
-                  </article>
+                  </div>
                 </div>
 
                 <div className="fg-actions">
