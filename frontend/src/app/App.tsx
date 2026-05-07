@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 
-import { clearAdminToken, fetchAdminSession, getAdminToken, logoutAdmin, type AdminSessionUser } from "../api/domain";
-import { adminKeys } from "../api/adminQueries";
+import { adminKeys } from "../api/adminKeys";
+import {
+  clearAdminToken,
+  fetchAdminSession,
+  getAdminToken,
+  logoutAdmin,
+  type AdminSessionUser,
+} from "../api/domain/auth";
 import { AppShell } from "../components/layout/AppShell";
 import { LoadingState } from "../components/ui/StateBlocks";
 import { getSessionRouteState } from "./authRouting";

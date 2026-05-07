@@ -448,7 +448,7 @@ beforeEach(() => {
       checked_at: "2026-04-23T08:31:00Z",
       checks: [
         { id: "postgres_url", ok: true, details: "FORGEFRAME_HARNESS_POSTGRES_URL" },
-        { id: "migration_runner", ok: true, details: "scripts/apply-storage-migrations.py" },
+        { id: "migration_runner", ok: true, details: "deploy/scripts/apply-storage-migrations.py" },
         { id: "public_https_listener", ok: false, details: "0.0.0.0:443;mode=local_only" },
         { id: "public_fqdn_tls_evidence", ok: false, details: "fqdn=missing;dns=missing;cert=missing;mode=local_only" },
         { id: "frontend_dist", ok: true, details: "frontend/dist/index.html" },
@@ -566,8 +566,8 @@ describe("observability pages", () => {
 
     expect(container.textContent).toContain("Health Status");
     expect(container.textContent).toContain("TLS / FQDN");
-    expect(container.textContent).toContain("Signal Path");
-    expect(container.textContent).toContain("Provider Needing Review");
+    expect(container.textContent).toContain("Signal path");
+    expect(container.textContent).toContain("Providers needing review");
     expect(container.textContent).toContain("public_fqdn_tls_evidence");
     const oauthButtons = Array.from(container.querySelectorAll("button")).filter((btn) => btn.textContent?.trim() === "Review OAuth targets");
     expect(oauthButtons.length).toBeGreaterThan(0);

@@ -11,7 +11,7 @@ Group=@@SYSTEM_GROUP@@
 WorkingDirectory=@@INSTALL_ROOT@@
 Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
 Environment=FORGEFRAME_RUNTIME_MODE=host_native
-ExecStart=@@INSTALL_ROOT@@/.venv/bin/python @@INSTALL_ROOT@@/scripts/run-execution-worker.py
+ExecStart=@@INSTALL_ROOT@@/.venv/bin/python @@INSTALL_ROOT@@/deploy/scripts/run-execution-worker.py
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

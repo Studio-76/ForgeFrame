@@ -461,7 +461,7 @@ class ControlPlaneOpenAICompatibilityDomainMixin:
                 route="/v1/models",
                 provider_axis="openai_compatible_clients",
                 deviation_reason="Public model inventory exists and is tested, but no dedicated signoff runner currently records fresh `/v1/models` evidence into operator history.",
-                evidence_source="backend/tests/test_runtime_core.py+scripts/compose-client-compat-signoff.sh",
+                evidence_source="backend/tests/test_runtime_core.py+deploy/scripts/compose-client-compat-signoff.sh",
                 raw_diff_summary="The sanitized model list is implemented, but operator evidence for this slice is not yet first-class.",
             ),
             self._signoff_row(

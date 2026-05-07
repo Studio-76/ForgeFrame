@@ -455,7 +455,7 @@ export function HealthPage() {
     <IncidentResponsePage
       eyebrow="Runtime"
       title="Health Status"
-      description="System health and active incidents for the selected instance"
+      description="System health and active incidents for the selected instance."
       scope={selectedInstance ? {
         label: selectedInstance.display_name ?? selectedInstance.instance_id,
         onChange: () => onInstanceChange(null),
@@ -488,7 +488,7 @@ export function HealthPage() {
         <div className="ff-state-block" data-state="loading">
           <div className="ff-skeleton-row" />
           <strong>Loading health surface</strong>
-          <p>Restoring runtime health, provider readiness, signal paths, and risk evidence.</p>
+          <p>Loading runtime health, provider readiness, and signal paths.</p>
         </div>
       ) : null}
 
@@ -512,10 +512,7 @@ export function HealthPage() {
           {/* ── Providers needing review ── */}
           <article className="fg-card">
             <div className="fg-panel-heading">
-              <div>
-                <h3>Provider Needing Review</h3>
-                <p className="fg-muted">Providers are listed here only when their runtime or auth posture needs intervention.</p>
-              </div>
+              <h3>Providers needing review</h3>
             </div>
             <ul className="fg-list">
               {providersNeedingReview.length === 0 ? <li>No provider needs review right now.</li> : null}
@@ -537,10 +534,7 @@ export function HealthPage() {
           {/* ── Signal path ── */}
           <article className="fg-card">
             <div className="fg-panel-heading">
-              <div>
-                <h3>Signal Path</h3>
-                <p className="fg-muted">Prove that logs, usage, costs, and audit are actually being fed by the running product.</p>
-              </div>
+              <h3>Signal path</h3>
             </div>
             <div className="fg-grid fg-grid-compact">
               {signalRows.map((row) => (

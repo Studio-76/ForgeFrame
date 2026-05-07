@@ -402,7 +402,7 @@ function EmptyStateDemo() {
   return (
     <Section title="Empty State Pattern">
       <div className="ff-skills-empty-content">
-        <div className="ff-skills-tron-frame fg-card">
+        <div className="ff-frame-accent fg-card">
           <h3 className="text-primary font-bold text-lg">No items yet</h3>
           <p className="ff-skills-empty-desc">
             Skills let you define reusable capabilities — code review, deployment gates,

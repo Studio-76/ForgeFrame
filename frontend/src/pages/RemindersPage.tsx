@@ -440,14 +440,14 @@ export function RemindersPage() {
         <PageIntro
           eyebrow="Work Interaction"
           title="Reminders"
-          description="ForgeFrame is restoring reminder scope before exposing due-state truth."
-          question="Which reminder queue should open once the active session is restored?"
+          description="Restoring reminder scope before exposing due-state truth."
+          question="Which reminder queue should open once the session is restored?"
           links={[
-            { label: "Tasks", to: CONTROL_PLANE_ROUTES.tasks, description: "Return to task inventory while session state resolves." },
-            { label: "Notifications", to: CONTROL_PLANE_ROUTES.notifications, description: "Open delivery truth once the session is ready." },
+            { label: "Tasks", to: CONTROL_PLANE_ROUTES.tasks, description: "Return to task inventory." },
+            { label: "Notifications", to: CONTROL_PLANE_ROUTES.notifications, description: "Open delivery truth when ready." },
           ]}
           badges={[{ label: "Checking access", tone: "neutral" }]}
-          note="Reminders stay instance-scoped and must reconcile task, automation, and notification linkage."
+          note="Reminders are instance-scoped and reconciled with task, automation, and notification linkage."
         />
       </section>
     );
@@ -459,14 +459,14 @@ export function RemindersPage() {
         <PageIntro
           eyebrow="Work Interaction"
           title="Reminders"
-          description="This route is reserved for operators and admins who can inspect real reminder truth."
-          question="Which adjacent surface should remain open while reminder access is outside the current permission envelope?"
+          description="Operator or admin access required to inspect reminder truth."
+          question="Which adjacent surface should open while reminder access is unavailable?"
           links={[
-            { label: "Tasks", to: CONTROL_PLANE_ROUTES.tasks, description: "Review linked task truth instead." },
-            { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, description: "Stay on the approval queue while reminder truth is unavailable." },
+            { label: "Tasks", to: CONTROL_PLANE_ROUTES.tasks, description: "Review linked task truth." },
+            { label: "Approvals", to: CONTROL_PLANE_ROUTES.approvals, description: "Switch to approval queue." },
           ]}
           badges={[{ label: "Operator or admin required", tone: "warning" }]}
-          note="ForgeFrame does not render a cosmetic reminder shell when the session cannot inspect due-state truth."
+          note="Session cannot inspect due-state reminder truth."
         />
       </section>
     );
@@ -478,7 +478,7 @@ export function RemindersPage() {
     <ReviewQueuePage
       eyebrow="Work Interaction"
       title="Reminders"
-      description="Reminder control plane grouped by due pressure, with direct snooze, complete, cancel, and linkage back to tasking, notification, conversation, and automation truth."
+      description="Reminders grouped by due pressure with snooze, complete, cancel, and linkage."
       summaryItems={summaryItems}
       actions={actions}
       attentionItems={attentionItems}

@@ -443,7 +443,7 @@ export function AgentsPage() {
       <RegistryManagementPage
         eyebrow="Work Interaction"
         title="Agents"
-        description="ForgeFrame is restoring instance-scoped agent truth."
+        description="Restoring instance-scoped agent data."
         attentionItems={[
           { key: "session", level: "warning", title: "Checking access", description: "Session state is resolving." },
         ]}
@@ -456,7 +456,7 @@ export function AgentsPage() {
       <RegistryManagementPage
         eyebrow="Work Interaction"
         title="Agents"
-        description="This route is reserved for operators and admins who can inspect real agent truth."
+        description="Operator or admin access required to inspect agent truth."
         attentionItems={[
           {
             key: "permission",
@@ -476,7 +476,7 @@ export function AgentsPage() {
       <RegistryManagementPage
         eyebrow="Work Interaction"
         title="Agents"
-        description="Per-instance agent registry for the required Operator, specialized agents, participation posture, profile links, and conversation addressability."
+        description="Per-instance agent registry: Operator, specialized agents, participation posture."
         scope={{
           label: currentInstanceLabel,
           onChange:
@@ -660,7 +660,7 @@ export function AgentsPage() {
                 {repairingOperator ? "Restoring Operator" : "Restore required Operator"}
               </button>
           </div>
-          <p className="fg-muted">The backend supports an explicit repair path. ForgeFrame does not silently create the Operator just because someone opened the registry.</p>
+          <p className="fg-muted">Operator must be explicitly repaired — it is not auto-created.</p>
         </section>
       ) : null}
 

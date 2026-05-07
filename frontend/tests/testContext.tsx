@@ -63,3 +63,25 @@ export function withAppContext({
     </QueryClientProvider>
   );
 }
+
+/**
+ * Open a `<details>` element by matching visible summary text.
+ * @param root - DOM subtree to search.
+ * @param summaryText - Text expected in the details summary.
+ * @returns The opened details element.
+ * @throws {Error} If no matching details element exists.
+ */
+export function expandDetailsBySummary(
+  root: ParentNode,
+  summaryText: string,
+): HTMLDetailsElement {
+  const details = Array.from(root.querySelectorAll("details")).find((candidate) => (
+    candidate.querySelector("summary")?.textContent?.includes(summaryText) ?? false
+  ));
+  if (!details) {
+    throw new Error(`Details summary not found: ${summaryText}`);
+  }
+  details.open = true;
+  details.dispatchEvent(new Event("toggle", { bubbles: true }));
+  return details;
+}

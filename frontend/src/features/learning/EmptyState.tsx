@@ -29,7 +29,7 @@ export function EmptyState({
   onCreateManual,
 }: EmptyStateProps) {
   return (
-    <article className="fg-card ff-learning-empty ff-learning-tron-frame">
+    <article className="fg-card ff-learning-empty ff-frame-accent">
       <div className="ff-learning-empty-content">
         <span className="ff-learning-status-led" data-state="success">
           Queue clear

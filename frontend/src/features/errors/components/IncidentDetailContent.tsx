@@ -91,17 +91,17 @@ export function IncidentDetailContent({
         </div>
       }
     >
-      <div className="fg-stack">
-        <section className="fg-subcard">
-          <h4>Interpretation</h4>
+      <div>
+        <div className="mb-3">
+          <h4 className="font-semibold text-sm mb-1">Interpretation</h4>
           <p>{detailSummary}</p>
           <p className="fg-muted">{detailEffect}</p>
-        </section>
+        </div>
 
-        <section className="fg-subcard">
-          <h4>Next step</h4>
+        <div>
+          <h4 className="font-semibold text-sm mb-1">Next step</h4>
           <p>{detailNextStep}</p>
-        </section>
+        </div>
       </div>
     </DetailPanel>
   );

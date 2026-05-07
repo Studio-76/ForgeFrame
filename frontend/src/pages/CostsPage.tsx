@@ -360,7 +360,7 @@ export function CostsPage() {
       label: "Actual cost",
       value: formatCurrency(truthByKey.actual?.total_cost ?? null),
       meta: truthByKey.actual?.billing_truth
-        ? "Billing truth when ForgeFrame meters the provider path."
+        ? "Billing truth from provider metering."
         : "Not available.",
       tone: truthByKey.actual ? truthTone(truthByKey.actual) : "neutral",
       status: truthByKey.actual?.status ?? "partial",
@@ -369,7 +369,7 @@ export function CostsPage() {
       key: "estimated",
       label: "Estimated cost",
       value: formatCurrency(truthByKey.estimated?.total_cost ?? null),
-      meta: "Forecast only. Never presented as provider billing truth.",
+      meta: "Forecast only, not billing truth.",
       tone: truthByKey.estimated ? truthTone(truthByKey.estimated) : "neutral",
       status: truthByKey.estimated?.status ?? "partial",
     },
@@ -377,7 +377,7 @@ export function CostsPage() {
       key: "modeled",
       label: "Modeled gap",
       value: formatCurrency(truthByKey.modeled?.total_cost ?? null),
-      meta: "Estimated exposure outside ForgeFrame direct metering.",
+      meta: "Estimated exposure outside direct metering.",
       tone: truthByKey.modeled ? truthTone(truthByKey.modeled) : "neutral",
       status: truthByKey.modeled?.status ?? "partial",
     },
@@ -532,7 +532,7 @@ export function CostsPage() {
     <RegistryManagementPage
       eyebrow="Operations"
       title="Costs & Budget Controls"
-      description="Costs is the budget and cost-safety surface for ForgeFrame: billing truth stays separated from estimated and modeled exposure, while budget posture, blocked classes, and circuit pressure remain operator-visible and real."
+      description="Costs, budget posture, blocked classes, and circuit pressure."
       scope={
         selectedInstance
           ? {
@@ -554,22 +554,22 @@ export function CostsPage() {
         <div className="ff-state-block" data-state="loading">
           <div className="ff-skeleton-row" />
           <strong>Checking cost-safety access</strong>
-          <p>ForgeFrame is confirming whether this session can read usage analytics, routing budget posture, or both.</p>
+          <p>Confirming read permissions for usage or routing data.</p>
         </div>
       ) : null}
 
       {preloadState === "blocked" ? (
         <div className="ff-state-block" data-state="info">
           <strong>Cost-safety surface unavailable</strong>
-          <p>This session does not hold audit.read or routing.read on the active scope, so ForgeFrame will not pretend the budget or cost truth surfaces are open.</p>
+          <p>Session lacks audit.read or routing.read on the active scope.</p>
         </div>
       ) : null}
 
       {preloadState === "error" ? (
         <div className="ff-state-block" data-state="error">
           <strong>Costs surface failed to load</strong>
-          <p className="text-meta text-muted mt-1.5 max-w-md">{error ?? "Cost posture could not be loaded."}</p>
-          <div className="mt-4">
+          <p className="text-meta text-muted mt-1.5">{error ?? "Cost posture could not be loaded."}</p>
+          <div className="mt-3">
             <Button variant="secondary" onPress={loadForRetry}>
               Retry
             </Button>
@@ -578,7 +578,7 @@ export function CostsPage() {
       ) : null}
 
       {!preloadState && state === "loading" ? (
-        <p className="fg-muted">Refreshing usage cost truth, budget posture, and circuit pressure.</p>
+        <p className="fg-muted text-sm">Refreshing cost data.</p>
       ) : null}
 
       {!preloadState ? (
@@ -603,13 +603,7 @@ export function CostsPage() {
               {/* Cost truth ledger */}
               <section className="fg-card">
                 <div className="fg-panel-heading">
-                  <div>
-                    <h3>Cost truth ledger</h3>
-                    <p className="fg-muted">
-                      Billing truth and operator estimates stay split so this page never implies that
-                      forecasted or modeled numbers are provider invoices.
-                    </p>
-                  </div>
+                  <h3>Cost truth ledger</h3>
                 </div>
                 <CostTruthTable
                   canReadUsage={canReadUsage}
@@ -624,13 +618,7 @@ export function CostsPage() {
               {/* Budget posture + blocked classes + circuits */}
               <section className="fg-card">
                 <div className="fg-panel-heading">
-                  <div>
-                    <h3>Budget posture</h3>
-                    <p className="fg-muted">
-                      Hard block stops all routing. Soft-limit scopes warn and can suppress selected
-                      cost classes before fallback or escalation chooses a target.
-                    </p>
-                  </div>
+                  <h3>Budget posture</h3>
                 </div>
                 <CostBudgetView
                   canReadRouting={canReadRouting}
@@ -671,13 +659,7 @@ export function CostsPage() {
               {/* Routing cost mix */}
               <section className="fg-card">
                 <div className="fg-panel-heading">
-                  <div>
-                    <h3>Routing cost mix</h3>
-                    <p className="fg-muted">
-                      Recent selected targets explain whether routing is leaning on premium paths or
-                      staying inside low-cost lanes.
-                    </p>
-                  </div>
+                  <h3>Routing cost mix</h3>
                 </div>
                 <CostMixView
                   canReadRouting={canReadRouting}

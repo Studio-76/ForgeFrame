@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: forgeframe-postgres
+    env_file:
+      - ../../.env.compose
+    environment:
+      POSTGRES_USER: ${FORGEFRAME_PG_USER:-forgeframe}
+      POSTGRES_PASSWORD: ${FORGEFRAME_PG_PASSWORD:?FORGEFRAME_PG_PASSWORD must be set}
+      POSTGRES_DB: ${FORGEFRAME_PG_DB:-forgeframe}
+    ports:
+      - "${FORGEFRAME_PG_PORT:-5432}:5432"
+    volumes:
+      - forgeframe_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${FORGEFRAME_PG_USER:-forgeframe} -d ${FORGEFRAME_PG_DB:-forgeframe}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  forgeframe:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.backend
+    container_name: forgeframe-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ../../.env.compose
+    environment:
+      FORGEFRAME_HOST: 0.0.0.0
+      FORGEFRAME_PORT: 8000
+      FORGEFRAME_HARNESS_STORAGE_BACKEND: postgresql
+      FORGEFRAME_CONTROL_PLANE_STORAGE_BACKEND: postgresql
+      FORGEFRAME_OBSERVABILITY_STORAGE_BACKEND: postgresql
+      FORGEFRAME_GOVERNANCE_STORAGE_BACKEND: postgresql
+      FORGEFRAME_HARNESS_POSTGRES_URL: ${FORGEFRAME_HARNESS_POSTGRES_URL:?FORGEFRAME_HARNESS_POSTGRES_URL must be set}
+      FORGEFRAME_CONTROL_PLANE_POSTGRES_URL: ${FORGEFRAME_CONTROL_PLANE_POSTGRES_URL:?FORGEFRAME_CONTROL_PLANE_POSTGRES_URL must be set}
+      FORGEFRAME_OBSERVABILITY_POSTGRES_URL: ${FORGEFRAME_OBSERVABILITY_POSTGRES_URL:?FORGEFRAME_OBSERVABILITY_POSTGRES_URL must be set}
+      FORGEFRAME_GOVERNANCE_POSTGRES_URL: ${FORGEFRAME_GOVERNANCE_POSTGRES_URL:?FORGEFRAME_GOVERNANCE_POSTGRES_URL must be set}
+      FORGEFRAME_OBSERVABILITY_EVENTS_PATH: /var/lib/forgeframe/observability_events.jsonl
+      FORGEFRAME_FRONTEND_DIST_PATH: /app/frontend_dist
+    ports:
+      - "${FORGEFRAME_APP_PORT:-8000}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - forgeframe_app_data:/var/lib/forgeframe
+
+volumes:
+  forgeframe_postgres_data:
+  forgeframe_app_data:

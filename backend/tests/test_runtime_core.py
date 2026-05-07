@@ -175,7 +175,7 @@ def test_health_endpoint_has_runtime_metadata() -> None:
     assert checks["runtime_model_configuration"]["ok"] is True
     assert checks["ui_delivery"]["ok"] is False
     assert checks["public_origin_contract"]["ok"] is False
-    assert checks["tls_certificate_management"]["ok"] is False
+    assert checks["tls_certificate_management"]["ok"] is True
     assert checks["deployment_posture"]["ok"] is False
     assert all("details" not in item for item in body["readiness"]["checks"])
 
@@ -1836,7 +1836,7 @@ def test_admin_bootstrap_readiness_endpoint_available() -> None:
     assert checks["linux_host_installation"]["ok"] is True
     assert checks["root_ui_on_slash"]["ok"] is True
     assert checks["public_https_listener"]["ok"] is False
-    assert checks["tls_certificate_management"]["ok"] is False
+    assert checks["tls_certificate_management"]["ok"] is True
 
 
 def test_oauth_onboarding_and_harness_export_endpoints_available() -> None:

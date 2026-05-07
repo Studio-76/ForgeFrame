@@ -288,7 +288,7 @@ export function UsagePage() {
       <PageHeader
         eyebrow="Operations"
         title="Usage Analysis"
-        description="Inspect traffic volume, runtime pressure, provider hotspots, and client concentration. Costs stays the place for budget control, and Errors stays the place for incident review."
+        description="Traffic volume, runtime pressure, provider hotspots, and client concentration."
       />
 
       {/* ── Scope indicator ── */}

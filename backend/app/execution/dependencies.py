@@ -4,24 +4,26 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+import app.execution.admin_models  # noqa: F401 — resolves workspace circular import early
 from app.api.admin.instance_scope import require_admin_instance_scope
-from app.core.dispatch import DispatchService
-from app.core.model_registry import ModelRegistry
-from app.core.routing import RoutingService
-from app.execution.admin_service import ExecutionAdminService
-from app.execution.service import ExecutionTransitionService
-from app.execution.worker_service import ExecutionWorkerService
 from app.instances.models import InstanceRecord
 from app.instances.service import get_instance_service
-from app.providers import ProviderRegistry
-from app.responses.service import ResponsesService
 from app.settings.config import Settings, get_settings
-from app.storage.models import Base
+from app.storage.db import get_pool_config
+
+if TYPE_CHECKING:
+    from app.core.dispatch import DispatchService
+    from app.execution.admin_service import ExecutionAdminService
+    from app.execution.service import ExecutionTransitionService
+    from app.execution.worker_service import ExecutionWorkerService
+    from app.providers import ProviderRegistry
+    from app.responses.service import ResponsesService
 
 
 def _resolve_safe_sqlite_path(raw_path: str) -> Path:
@@ -55,9 +57,19 @@ def _resolve_execution_database_url(settings: Settings) -> str:
 
 @lru_cache(maxsize=1)
 def get_execution_session_factory():
+    from app.storage.models import Base
+
     settings = get_settings()
     database_url = _resolve_execution_database_url(settings)
-    engine = create_engine(database_url, pool_pre_ping=database_url.startswith("postgresql"))
+    is_pg = database_url.startswith("postgresql")
+    if is_pg:
+        engine = create_engine(
+            database_url,
+            pool_pre_ping=True,
+            **get_pool_config(),
+        )
+    else:
+        engine = create_engine(database_url)
     Base.metadata.create_all(engine)
     return sessionmaker(engine, autoflush=False, expire_on_commit=False)
 
@@ -70,6 +82,8 @@ def get_execution_transition_service() -> ExecutionTransitionService:
         from ``Settings.execution_state_machine_validation_enabled``.
     :rtype: ExecutionTransitionService
     """
+    from app.execution.service import ExecutionTransitionService
+
     settings = get_settings()
     return ExecutionTransitionService(
         get_execution_session_factory(),
@@ -79,16 +93,24 @@ def get_execution_transition_service() -> ExecutionTransitionService:
 
 @lru_cache(maxsize=1)
 def get_execution_admin_service() -> ExecutionAdminService:
+    from app.execution.admin_service import ExecutionAdminService
+
     return ExecutionAdminService(get_execution_session_factory())
 
 
 @lru_cache(maxsize=1)
 def get_execution_provider_registry() -> ProviderRegistry:
+    from app.providers import ProviderRegistry
+
     return ProviderRegistry(get_settings())
 
 
 @lru_cache(maxsize=32)
 def _build_execution_dispatch_service(instance_id: str) -> DispatchService:
+    from app.core.dispatch import DispatchService
+    from app.core.model_registry import ModelRegistry
+    from app.core.routing import RoutingService
+
     settings = get_settings()
     registry = ModelRegistry(settings, instance_id=instance_id)
     routing = RoutingService(registry, get_execution_provider_registry(), settings, instance_id=instance_id)
@@ -97,6 +119,8 @@ def _build_execution_dispatch_service(instance_id: str) -> DispatchService:
 
 @lru_cache(maxsize=1)
 def get_execution_responses_service() -> ResponsesService:
+    from app.responses.service import ResponsesService
+
     return ResponsesService(
         get_execution_session_factory(),
         execution=get_execution_transition_service(),
@@ -105,6 +129,8 @@ def get_execution_responses_service() -> ResponsesService:
 
 @lru_cache(maxsize=1)
 def get_execution_worker_service() -> ExecutionWorkerService:
+    from app.execution.worker_service import ExecutionWorkerService
+
     return ExecutionWorkerService(
         get_execution_session_factory(),
         settings=get_settings(),

@@ -481,10 +481,10 @@ export function ArtifactsPage() {
       <RegistryManagementPage
         eyebrow="Work Interaction"
         title="Artifacts"
-        description="ForgeFrame is restoring artifact scope before exposing preview, retention, and handoff evidence."
+        description="Restoring artifact scope before exposing preview and retention."
         isEmpty
         emptyTitle="Checking access"
-        emptyDescription="ForgeFrame waits for session state before opening preview or download truth."
+        emptyDescription="Waiting for session state before opening artifact preview."
       />
     );
   }
@@ -495,10 +495,10 @@ export function ArtifactsPage() {
         <RegistryManagementPage
           eyebrow="Work Interaction"
           title="Artifacts"
-          description="This route is reserved for operators and admins who can inspect attached runtime evidence."
+          description="Operator or admin access required to inspect runtime evidence."
           isEmpty
           emptyTitle="Operator or admin required"
-          emptyDescription="Viewers do not get a cosmetic artifact shell. This route stays closed unless the session can inspect real attached evidence."
+          emptyDescription="This route is closed unless the session can inspect attached evidence."
         />
         <ContextNavStrip
           compact
@@ -517,7 +517,7 @@ export function ArtifactsPage() {
     <RegistryManagementPage
       eyebrow="Work Interaction"
       title="Artifacts"
-      description="Artifact inventory for preview, download, linked runtime objects, checksums, versions, and retention posture."
+      description="Artifact inventory: preview, download, checksums, versions, and retention."
       scope={scopeConfig}
       attentionItems={attentionItems}
       summaryItems={summaryItems}

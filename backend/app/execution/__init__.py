@@ -1,4 +1,10 @@
-"""Execution domain contracts for transactional run persistence."""
+"""Execution domain contracts for transactional run persistence.
+
+Lightweight import surface.  Heavy modules (``service.py``) are loaded lazily
+to minimise startup-time import chain cost.
+"""
+
+from __future__ import annotations
 
 from app.execution.models import (
     EXECUTION_WORKER_STATES,
@@ -39,20 +45,37 @@ from app.execution.models import (
     RunSecretBindingRecord,
     SecretReferenceRecord,
 )
-from app.execution.service import (
-    ApprovalOpenResult,
-    AttemptFailureResult,
-    ClaimCandidate,
-    ClaimResult,
-    CommandTransitionResult,
-    ExecutionTransitionError,
-    ExecutionTransitionService,
-    LeaseHeartbeatResult,
-    LeaseReconcileResult,
-    RunNotFoundError,
-    RunTransitionConflictError,
-    StaleWorkerClaimError,
-)
+
+# Re-exported from ``service.py`` — loaded lazily to avoid pulling in
+# ``transitions``, SQLAlchemy, and the full state-machine machinery at
+# package-import time.  Consumers that need these types should import
+# directly from ``app.execution.service`` for best startup performance.
+
+__lazy_service_names: frozenset[str] = frozenset({
+    "ApprovalOpenResult",
+    "AttemptFailureResult",
+    "ClaimCandidate",
+    "ClaimResult",
+    "CommandTransitionResult",
+    "ExecutionTransitionError",
+    "ExecutionTransitionService",
+    "LeaseHeartbeatResult",
+    "LeaseReconcileResult",
+    "RunNotFoundError",
+    "RunTransitionConflictError",
+    "StaleWorkerClaimError",
+})
+
+
+def __getattr__(name: str):
+    if name in __lazy_service_names:
+        import importlib
+
+        svc = importlib.import_module("app.execution.service")
+        return getattr(svc, name)
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
+
 
 __all__ = [
     "CreateRun",

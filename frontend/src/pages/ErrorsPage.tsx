@@ -181,7 +181,7 @@ export function ErrorsPage() {
       key: "critical",
       label: "Critical incidents",
       value: formatMetric(criticalCount),
-      meta: criticalCount > 0 ? "Every critical incident includes a next step on this surface." : "No critical incident group is active.",
+      meta: criticalCount > 0 ? "Next step available for each." : "No critical incidents active.",
       tone: criticalCount > 0 ? ("danger" as const) : ("success" as const),
       status: criticalCount > 0 ? "blocked" : "ready",
     },
@@ -189,7 +189,7 @@ export function ErrorsPage() {
       key: "warning",
       label: "Warning incidents",
       value: formatMetric(warningCount),
-      meta: warningCount > 0 ? "Warning groups are prioritized ahead of clear or unsupported axes." : "No warning incident group is active.",
+      meta: warningCount > 0 ? "Prioritized ahead of clear axes." : "No warning incidents active.",
       tone: warningCount > 0 ? ("warning" as const) : ("success" as const),
       status: warningCount > 0 ? "degraded" : "ready",
     },
@@ -197,7 +197,7 @@ export function ErrorsPage() {
       key: "routing",
       label: "Blocked routing failures",
       value: formatMetric(blockedRoutingFailures.length),
-      meta: blockedRoutingFailures.length > 0 ? "Policy, budget, or capability failures need routing follow-up." : "No blocked routing failure is visible.",
+      meta: blockedRoutingFailures.length > 0 ? "Policy, budget, or capability failures." : "No blocked routing failures.",
       tone: blockedRoutingFailures.length > 0 ? ("danger" as const) : ("success" as const),
       status: blockedRoutingFailures.length > 0 ? "blocked" : "ready",
     },
@@ -205,7 +205,7 @@ export function ErrorsPage() {
       key: "alerts",
       label: "Alert pressure",
       value: formatMetric(activeAlerts.length),
-      meta: activeAlerts.length > 0 ? "Alerts stay evidence only. Triage stays on this route." : "No active alert is visible.",
+      meta: activeAlerts.length > 0 ? "Evidence only — triage on this route." : "No active alerts.",
       tone: activeAlerts.length > 0 ? ("warning" as const) : ("success" as const),
       status: activeAlerts.length > 0 ? "degraded" : "ready",
     },
@@ -225,7 +225,7 @@ export function ErrorsPage() {
       key: "critical-incidents",
       level: "primary_blocker",
       title: `${criticalCount} critical incident${criticalCount > 1 ? "s" : ""}`,
-      description: "Critical incidents need immediate operator attention. Every critical incident includes a next step on this surface.",
+      description: "Each critical incident has a next step on this surface.",
     });
   }
   if (warningCount > 0) {
@@ -233,7 +233,7 @@ export function ErrorsPage() {
       key: "warning-incidents",
       level: "warning",
       title: `${warningCount} warning incident${warningCount > 1 ? "s" : ""}`,
-      description: "Warning incidents are prioritized ahead of clear or unsupported axes.",
+      description: "Prioritized ahead of clear or unsupported axes.",
     });
   }
   if (criticalCount === 0 && warningCount === 0) {
@@ -246,31 +246,31 @@ export function ErrorsPage() {
 
   const pageActions: Action[] = [
     {
-      label: "Review logs evidence",
+      label: "Logs evidence",
       kind: "navigation",
       intent: "navigate",
       onClick: () => navigate(withInstanceScope(CONTROL_PLANE_ROUTES.logs, instanceId)),
     },
     {
-      label: "Review runtime health",
+      label: "Runtime health",
       kind: "navigation",
       intent: "navigate",
       onClick: () => navigate(withInstanceScope(CONTROL_PLANE_ROUTES.health, instanceId)),
     },
     {
-      label: "Review routing policy",
+      label: "Routing policy",
       kind: "navigation",
       intent: "navigate",
       onClick: () => navigate(withInstanceScope(CONTROL_PLANE_ROUTES.routing, instanceId)),
     },
     {
-      label: "Review provider targets",
+      label: "Provider targets",
       kind: "navigation",
       intent: "navigate",
       onClick: () => navigate(withInstanceScope(CONTROL_PLANE_ROUTES.providerTargets, instanceId)),
     },
     {
-      label: "Inspect execution failures",
+      label: "Execution failures",
       kind: "navigation",
       intent: "navigate",
       onClick: () => navigate(withInstanceScope(CONTROL_PLANE_ROUTES.execution, instanceId)),
@@ -281,7 +281,7 @@ export function ErrorsPage() {
     <IncidentResponsePage
       eyebrow="Runtime"
       title="Errors & Incidents"
-      description="Errors is the incident-triage surface for ForgeFrame: grouped failure axes, blocked routing failures, current effect, next action, and evidence handoff into Logs, Health, Routing, Provider Targets, and Execution."
+      description="Incident triage: grouped failure axes, blocked routing, and evidence handoff."
       scope={selectedInstance ? {
         label: selectedInstance.display_name ?? selectedInstance.instance_id,
         onChange: () => onInstanceChange(null),
@@ -315,7 +315,7 @@ export function ErrorsPage() {
       {state === "loading" ? (
         <LoadingState
           title="Loading incident review"
-          description="ForgeFrame is restoring alert pressure, grouped incident axes, blocked routing failures, and the signal-path evidence behind them."
+          description="Restoring incident axes, routing failures, and signal-path evidence."
         />
       ) : null}
 
@@ -343,10 +343,7 @@ export function ErrorsPage() {
 
           <article className="fg-card">
             <div className="fg-panel-heading">
-              <div>
-                <h3>Incident triage by axis</h3>
-                <p className="fg-muted">Each axis carries severity, incident count, first/last seen, current effect, next step, and direct route handoff. Unsupported axes stay explicit instead of pretending to be green.</p>
-              </div>
+              <h3>Incident triage by axis</h3>
             </div>
 
             <div className="fg-table-wrap">
@@ -416,10 +413,7 @@ export function ErrorsPage() {
 
               <article className="fg-card">
                 <div className="fg-panel-heading">
-                  <div>
-                    <h3>Blocked routing failures</h3>
-                    <p className="fg-muted">Routing failures stay separated because policy, budget, circuit, and capability blockers need different follow-up routes.</p>
-                  </div>
+                  <h3>Blocked routing failures</h3>
                 </div>
 
                 {blockedRoutingFailures.length === 0 ? (
@@ -477,15 +471,12 @@ export function ErrorsPage() {
 
               <article className="fg-card">
                 <div className="fg-panel-heading">
-                  <div>
-                    <h3>Alerts and signal-path evidence</h3>
-                    <p className="fg-muted">Alerts stay evidence only. Operability checks tell you whether the incident view is being fed by healthy signal paths.</p>
-                  </div>
+                  <h3>Alerts and signal-path evidence</h3>
                 </div>
 
-                <div className="fg-card-grid">
-                  <article className="fg-subcard">
-                    <h4>Alerts</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-semibold text-sm mb-1">Alerts</h4>
                     <ul className="fg-list">
                       {activeAlerts.length === 0 ? <li>No active alert is visible.</li> : null}
                       {activeAlerts.map((alert, index) => (
@@ -494,10 +485,10 @@ export function ErrorsPage() {
                         </li>
                       ))}
                     </ul>
-                  </article>
+                  </div>
 
-                  <article className="fg-subcard">
-                    <h4>Operability checks</h4>
+                  <div>
+                    <h4 className="font-semibold text-sm mb-1">Operability checks</h4>
                     <ul className="fg-list">
                       {(overview.operability.checks ?? []).map((check, index) => (
                         <li key={`${stringifyValue(check.id)}-${index}`}>
@@ -505,7 +496,7 @@ export function ErrorsPage() {
                         </li>
                       ))}
                     </ul>
-                  </article>
+                  </div>
                 </div>
 
                 <div className="fg-actions">

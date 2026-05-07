@@ -21,10 +21,10 @@ Dieses Backend enthaelt den aktuellen ForgeFrame-Runtime-, Governance- und Contr
 
 ## Start (Dev)
 ```bash
-../scripts/dev-backend.sh
+../deploy/scripts/dev-backend.sh
 ```
 
 ## Tests
 ```bash
-../scripts/test-backend.sh
+../deploy/scripts/test-backend.sh
 ```

@@ -239,7 +239,7 @@ def build_ingress_tls_status(settings: Settings) -> IngressTlsStatus:
 
 def run_tls_renewal(settings: Settings) -> dict[str, Any]:
     status = build_ingress_tls_status(settings)
-    script = Path(__file__).resolve().parents[3] / "scripts" / "renew-certificates.sh"
+    script = Path(__file__).resolve().parents[3] / "deploy" / "scripts" / "renew-certificates.sh"
     command = ["bash", str(script)]
     if not status.renewal_allowed:
         return {

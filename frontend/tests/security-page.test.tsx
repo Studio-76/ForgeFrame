@@ -70,7 +70,7 @@ import type {
   SecurityBootstrapResponse,
 } from "../src/api/domain";
 import { SecurityPage } from "../src/pages/SecurityPage";
-import { withAppContext } from "./testContext";
+import { expandDetailsBySummary, withAppContext } from "./testContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -632,6 +632,21 @@ describe("Security page security center", () => {
     expect(container.textContent).toContain("Provider secret values never render here.");
     expect(container.textContent).toContain("FORGEFRAME_OPENAI_API_KEY");
     expect(container.textContent).not.toContain("super-secret-value");
+  });
+
+  it("defers bootstrap posture details until the disclosure is opened", async () => {
+    await renderSecurityPage(adminSession);
+
+    expect(container.textContent).toContain("Bootstrap baseline");
+    expect(container.textContent).not.toContain("Governance storage");
+
+    await act(async () => {
+      expandDetailsBySummary(container, "Bootstrap baseline");
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("Governance storage");
+    expect(container.textContent).toContain("sqlite");
   });
 
   it("lets an admin approve an elevated-access request from the dedicated approval queue", async () => {

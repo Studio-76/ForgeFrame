@@ -2,11 +2,12 @@
  * Compact filter bar for the skills registry table.
  *
  * Provides scope, status, active-only, and needs-review filters
- * in a single compact row.
+ * in a single compact row using shared UI primitives.
  *
  * @packageDocumentation
  */
 
+import { Select, Toggle, type SelectItem } from "../../components/ui";
 import { SCOPE_OPTIONS, STATUS_OPTIONS, STATUS_LABELS, SCOPE_LABELS } from "./types";
 
 /** Props for SkillFilters. */
@@ -23,8 +24,18 @@ export interface SkillFiltersProps {
   updateRoute: (mutate: (next: URLSearchParams) => void) => void;
 }
 
+const scopeItems: SelectItem[] = SCOPE_OPTIONS.map((key) => ({
+  id: key,
+  label: SCOPE_LABELS[key as keyof typeof SCOPE_LABELS],
+}));
+
+const statusItems: SelectItem[] = STATUS_OPTIONS.map((key) => ({
+  id: key,
+  label: STATUS_LABELS[key as keyof typeof STATUS_LABELS],
+}));
+
 /**
- * Compact filter bar with dropdowns and toggle switches.
+ * Compact filter bar with shared Select and Toggle primitives.
  */
 export function SkillFilters({
   statusFilter,
@@ -34,73 +45,49 @@ export function SkillFilters({
   updateRoute,
 }: SkillFiltersProps) {
   return (
-    <div className="ff-skills-filters">
-      <label className="ff-skills-filter-label">
-        Scope
-        <select
-          className="ff-skills-filter-select"
-          value={scopeFilter}
-          onChange={(event) =>
-            updateRoute((next) => {
-              const value = event.target.value;
-              if (value === "all") next.delete("scope");
-              else next.set("scope", value);
-            })
-          }
-        >
-          {SCOPE_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {SCOPE_LABELS[option]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="ff-skills-filter-label">
-        Status
-        <select
-          className="ff-skills-filter-select"
-          value={statusFilter}
-          onChange={(event) =>
-            updateRoute((next) => {
-              const value = event.target.value;
-              if (value === "all") next.delete("status");
-              else next.set("status", value);
-            })
-          }
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {STATUS_LABELS[option]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="ff-skills-filter-toggle">
-        <input
-          type="checkbox"
-          checked={activeOnly}
-          onChange={(event) =>
-            updateRoute((next) => {
-              if (event.target.checked) next.set("activeOnly", "1");
-              else next.delete("activeOnly");
-            })
-          }
-        />
-        <span>Active only</span>
-      </label>
-      <label className="ff-skills-filter-toggle">
-        <input
-          type="checkbox"
-          checked={needsReview}
-          onChange={(event) =>
-            updateRoute((next) => {
-              if (event.target.checked) next.set("needsReview", "1");
-              else next.delete("needsReview");
-            })
-          }
-        />
-        <span>Needs review</span>
-      </label>
+    <div className="flex flex-wrap items-center gap-4 p-2">
+      <Select
+        label="Scope"
+        items={scopeItems}
+        selectedKey={scopeFilter}
+        onSelectionChange={(key) =>
+          updateRoute((next) => {
+            if (!key || key === "all") next.delete("scope");
+            else next.set("scope", key);
+          })
+        }
+      />
+      <Select
+        label="Status"
+        items={statusItems}
+        selectedKey={statusFilter}
+        onSelectionChange={(key) =>
+          updateRoute((next) => {
+            if (!key || key === "all") next.delete("status");
+            else next.set("status", key);
+          })
+        }
+      />
+      <Toggle
+        label="Active only"
+        isSelected={activeOnly}
+        onChange={(val) =>
+          updateRoute((next) => {
+            if (val) next.set("activeOnly", "1");
+            else next.delete("activeOnly");
+          })
+        }
+      />
+      <Toggle
+        label="Needs review"
+        isSelected={needsReview}
+        onChange={(val) =>
+          updateRoute((next) => {
+            if (val) next.set("needsReview", "1");
+            else next.delete("needsReview");
+          })
+        }
+      />
     </div>
   );
 }

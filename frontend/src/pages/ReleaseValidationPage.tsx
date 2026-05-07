@@ -793,7 +793,7 @@ export function ReleaseValidationPage() {
     <RegistryManagementPage
       eyebrow="Release"
       title="Release Validation"
-      description="Consolidated release readiness across bootstrap, runtime, providers, routing, TLS, and recovery."
+      description="Release readiness across bootstrap, runtime, providers, routing, TLS, and recovery."
       scope={scope}
       attentionItems={attentionItems}
       summaryItems={summaryItems}

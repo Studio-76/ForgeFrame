@@ -165,3 +165,47 @@
   background: var(--fg-color-surface-field);
 }
 
+/* ─── Accent Frame — shared corner-bracket decoration ───
+ * Replaces page-specific .ff-skills-tron-frame and .ff-learning-tron-frame.
+ * Apply to any fg-card that needs GridCN-inspired accent corners.
+ * Minimal: thin accent top-left + bottom-right brackets.
+ * ────────────────────────────────────────────── */
+
+.ff-frame-accent {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(
+    in srgb,
+    var(--fg-color-accent) 34%,
+    var(--fg-color-border-default)
+  );
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--fg-color-accent) 8%, transparent),
+      transparent 28%
+    ),
+    var(--fg-color-surface-default);
+}
+
+.ff-frame-accent::before,
+.ff-frame-accent::after {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  content: "";
+  pointer-events: none;
+}
+
+.ff-frame-accent::before {
+  inset: 0 auto auto 0;
+  border-top: 1px solid var(--fg-color-accent);
+  border-left: 1px solid var(--fg-color-accent);
+}
+
+.ff-frame-accent::after {
+  inset: auto 0 0 auto;
+  border-right: 1px solid var(--fg-color-accent);
+  border-bottom: 1px solid var(--fg-color-accent);
+}
+

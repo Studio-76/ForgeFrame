@@ -5,6 +5,7 @@
  */
 
 import { Link } from "react-router-dom";
+import { Button, StatusBadge } from "../../components/ui";
 import { CONTROL_PLANE_ROUTES } from "../../app/navigation";
 
 /** Props for EmptyState. */
@@ -33,11 +34,9 @@ export function EmptyState({
     : CONTROL_PLANE_ROUTES.learning;
 
   return (
-    <article className="fg-card ff-skills-empty ff-skills-tron-frame">
+    <article className="fg-card ff-skills-empty ff-frame-accent">
       <div className="ff-skills-empty-content">
-        <span className="ff-skills-status-led" data-state="success">
-          Registry empty
-        </span>
+        <StatusBadge tone="success">Registry empty</StatusBadge>
         <h3>No skills are registered for this scope</h3>
         <p className="ff-skills-empty-desc">
           Skills define executable instructions that agents can run during
@@ -46,16 +45,15 @@ export function EmptyState({
           observed patterns.
         </p>
         <div className="ff-skills-empty-actions">
-          <button
-            type="button"
-            className="ff-skills-primary-action"
-            disabled={!canMutate || !hasInstance}
-            onClick={onCreateSkill}
+          <Button
+            variant="primary"
+            isDisabled={!canMutate || !hasInstance}
+            onPress={onCreateSkill}
           >
             Create skill
-          </button>
+          </Button>
           <Link
-            className="ff-skills-secondary-action"
+            className="ff-btn-secondary inline-flex items-center justify-center gap-1.5 px-3 py-2 text-body font-medium leading-none rounded-md border border-border text-muted hover:border-accent hover:text-primary transition-all duration-100 no-underline"
             to={learningPath}
           >
             Review learning events

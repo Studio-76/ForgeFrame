@@ -42,7 +42,7 @@ vi.mock("../src/api/admin/instances", async () => {
 
 import type { AdminSessionUser, PluginCatalogEntry } from "../src/api/domain";
 import { PluginsPage } from "../src/pages/PluginsPage";
-import { withAppContext } from "./testContext";
+import { expandDetailsBySummary, withAppContext } from "./testContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -316,6 +316,11 @@ describe("plugins page", () => {
 
     const createForm = getFormByButtonText("Create plugin");
     const manifestForm = getFormByButtonText("Save plugin manifest");
+    await act(async () => {
+      expandDetailsBySummary(createForm!, "Advanced manifest JSON");
+      expandDetailsBySummary(manifestForm!, "Advanced manifest JSON");
+    });
+    await flushEffects();
 
     const createButton = getButtonByText(createForm!, "Create plugin");
     await act(async () => {
@@ -383,6 +388,11 @@ describe("plugins page", () => {
     const bindingForm = getFormByButtonText("Save instance binding");
     const saveBindingButton = getButtonByText(bindingForm!, "Save instance binding");
     await act(async () => {
+      expandDetailsBySummary(bindingForm!, "Advanced binding JSON");
+    });
+    await flushEffects();
+
+    await act(async () => {
       setControlValue(getLabeledControl(bindingForm!, "Binding enabled"), "no");
       setControlValue(getLabeledControl(bindingForm!, "Binding config JSON"), "{\"mode\":\"preview\",\"max_items\":8}");
       setControlValue(getLabeledControl(bindingForm!, "Enabled capabilities"), "artifact.render");
@@ -419,6 +429,11 @@ describe("plugins page", () => {
     await flushEffects();
 
     const createForm = getFormByButtonText("Create plugin");
+    await act(async () => {
+      expandDetailsBySummary(createForm!, "Advanced manifest JSON");
+    });
+    await flushEffects();
+
     await act(async () => {
       setControlValue(getLabeledControl(createForm!, "Security posture JSON"), "[]");
     });

@@ -853,7 +853,7 @@ describe("Execution page operator workflow", () => {
     expect(fetchInstancesMock).not.toHaveBeenCalled();
     expect(fetchExecutionRunsMock).not.toHaveBeenCalled();
     expect(fetchExecutionRunDetailMock).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("reserved for operator and admin sessions");
+    expect(container.textContent).toContain("Operator or admin access required");
     expect(container.textContent).toContain("Operator or admin required");
   });
 

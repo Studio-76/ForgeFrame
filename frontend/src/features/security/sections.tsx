@@ -1,3 +1,4 @@
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import type {
@@ -93,6 +94,19 @@ export type RemediationItem = {
 
 export type OverallSecurityState = "secure" | "attention" | "recovery";
 
+/**
+ * Inputs required to render the high-level security posture section.
+ */
+export interface SecurityPostureSectionProps {
+  bootstrap: SecurityBootstrapStatus | null;
+  approverPosture: ElevatedAccessApproverPosture | null;
+  credentialPolicy: SecurityCredentialPolicy | null;
+  requests: ElevatedAccessRequest[];
+  sessions: AdminSecuritySession[];
+  users: AdminUser[];
+  canViewAdminTabs: boolean;
+}
+
 export const SECURITY_TABS: Array<{
   id: SecurityTabId;
   label: string;
@@ -136,6 +150,37 @@ function KeyValueList({ items }: { items: Array<{ label: string; value: string }
         </article>
       ))}
     </div>
+  );
+}
+
+/**
+ * Renders collapsed security details only after the operator expands them.
+ * @param summary - Visible summary content for the disclosure trigger.
+ * @param children - Expensive detail body rendered after first expansion.
+ * @returns A disclosure that defers collapsed detail rendering.
+ */
+function DeferredSecurityDetails({
+  summary,
+  children,
+}: {
+  summary: ReactNode;
+  children: ReactNode;
+}) {
+  const [hasOpened, setHasOpened] = useState(false);
+
+  return (
+    <details
+      onToggle={(event) => {
+        if (event.currentTarget.open) {
+          // Keep small static detail bodies mounted after first expansion so
+          // operators can collapse/reopen without losing browser focus state.
+          setHasOpened(true);
+        }
+      }}
+    >
+      <summary className="ff-sec-collapse-trigger">{summary}</summary>
+      {hasOpened ? <div className="ff-sec-collapse-body">{children}</div> : null}
+    </details>
   );
 }
 
@@ -203,8 +248,19 @@ export function BlockersRemediationChecklist({
   selectedId: string | null;
   onSelect: (id: string | null) => void;
 }) {
-  const activeItems = items.filter((item) => item.active);
-  const passedItems = items.filter((item) => !item.active);
+  const { activeItems, passedItems } = useMemo(() => {
+    const nextActiveItems: RemediationItem[] = [];
+    const nextPassedItems: RemediationItem[] = [];
+    for (const item of items) {
+      if (item.active) {
+        nextActiveItems.push(item);
+      } else {
+        nextPassedItems.push(item);
+      }
+    }
+    return { activeItems: nextActiveItems, passedItems: nextPassedItems };
+  }, [items]);
+  const [passedChecksOpened, setPassedChecksOpened] = useState(false);
 
   return (
     <div className="ff-sec-checklist">
@@ -239,33 +295,44 @@ export function BlockersRemediationChecklist({
         </div>
       ))}
       {passedItems.length > 0 ? (
-        <details className="ff-sec-checklist-item" data-passed="true" style={{ display: "grid", gridTemplateColumns: "1fr" }}>
+        <details
+          className="ff-sec-checklist-item"
+          data-passed="true"
+          style={{ display: "grid", gridTemplateColumns: "1fr" }}
+          onToggle={(event) => {
+            if (event.currentTarget.open) {
+              setPassedChecksOpened(true);
+            }
+          }}
+        >
           <summary className="ff-sec-checklist-label" style={{ cursor: "pointer", padding: "var(--fg-space-2) 0", fontWeight: 600, fontSize: "var(--fg-type-size-meta)", color: "var(--fg-color-text-secondary)" }}>
             {passedItems.length} passed check{passedItems.length !== 1 ? "s" : ""}
           </summary>
-          <div style={{ display: "grid", gap: "1px" }}>
-            {passedItems.map((item) => (
-              <div key={item.id} className="ff-sec-checklist-item" data-passed="true"
-                onClick={() => onSelect(selectedId === item.id ? null : item.id)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(selectedId === item.id ? null : item.id); } }}
-                role="button"
-                tabIndex={0}
-                aria-expanded={selectedId === item.id}
-                style={{ borderTop: "1px solid var(--fg-color-border-default)" }}
-              >
-                <div className="ff-sec-checklist-left">
-                  <span className="ff-sec-checklist-label">{item.label}</span>
-                  <span className="ff-sec-checklist-summary">{item.summary}</span>
+          {passedChecksOpened ? (
+            <div style={{ display: "grid", gap: "1px" }}>
+              {passedItems.map((item) => (
+                <div key={item.id} className="ff-sec-checklist-item" data-passed="true"
+                  onClick={() => onSelect(selectedId === item.id ? null : item.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(selectedId === item.id ? null : item.id); } }}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={selectedId === item.id}
+                  style={{ borderTop: "1px solid var(--fg-color-border-default)" }}
+                >
+                  <div className="ff-sec-checklist-left">
+                    <span className="ff-sec-checklist-label">{item.label}</span>
+                    <span className="ff-sec-checklist-summary">{item.summary}</span>
+                  </div>
+                  <div className="ff-sec-checklist-badges">
+                    <span className="fg-pill" data-tone="success">Clear</span>
+                  </div>
+                  <div className="ff-sec-checklist-action">
+                    <span className="fg-pill" data-tone="neutral">{item.actionLabel}</span>
+                  </div>
                 </div>
-                <div className="ff-sec-checklist-badges">
-                  <span className="fg-pill" data-tone="success">Clear</span>
-                </div>
-                <div className="ff-sec-checklist-action">
-                  <span className="fg-pill" data-tone="neutral">{item.actionLabel}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : null}
         </details>
       ) : null}
     </div>
@@ -372,29 +439,71 @@ export function SecurityTabBar({
   );
 }
 
-export function SecurityPostureSection({
-  bootstrap,
-  approverPosture,
-  credentialPolicy,
-  requests,
-  sessions,
-  users,
-  canViewAdminTabs,
-}: {
-  bootstrap: SecurityBootstrapStatus | null;
-  approverPosture: ElevatedAccessApproverPosture | null;
-  credentialPolicy: SecurityCredentialPolicy | null;
-  requests: ElevatedAccessRequest[];
-  sessions: AdminSecuritySession[];
-  users: AdminUser[];
-  canViewAdminTabs: boolean;
-}) {
-  const openRequests = requests.filter((item) => item.gate_status === "open").length;
-  const readyRequests = requests.filter((item) => item.ready_to_issue).length;
-  const activeElevated = requests.filter((item) => item.session_status === "active").length;
-  const forcedRotationUsers = users.filter((item) => item.must_rotate_password).length;
-  const activeSessions = sessions.filter((item) => item.active).length;
-  const breakGlassSessions = sessions.filter((item) => item.active && item.session_type === "break_glass").length;
+/**
+ * Shows high-level security posture and defers collapsed detail groups.
+ * @param props - Security posture data and access envelope.
+ * @returns Security overview section for the active posture tab.
+ */
+export function SecurityPostureSection(props: SecurityPostureSectionProps) {
+  const {
+    bootstrap,
+    approverPosture,
+    credentialPolicy,
+    requests,
+    sessions,
+    users,
+    canViewAdminTabs,
+  } = props;
+  const {
+    openRequests,
+    readyRequests,
+    activeElevated,
+    forcedRotationUsers,
+    activeSessions,
+    breakGlassSessions,
+  } = useMemo(() => {
+    let nextOpenRequests = 0;
+    let nextReadyRequests = 0;
+    let nextActiveElevated = 0;
+    let nextForcedRotationUsers = 0;
+    let nextActiveSessions = 0;
+    let nextBreakGlassSessions = 0;
+
+    for (const request of requests) {
+      if (request.gate_status === "open") {
+        nextOpenRequests += 1;
+      }
+      if (request.ready_to_issue) {
+        nextReadyRequests += 1;
+      }
+      if (request.session_status === "active") {
+        nextActiveElevated += 1;
+      }
+    }
+    for (const user of users) {
+      if (user.must_rotate_password) {
+        nextForcedRotationUsers += 1;
+      }
+    }
+    for (const session of sessions) {
+      if (!session.active) {
+        continue;
+      }
+      nextActiveSessions += 1;
+      if (session.session_type === "break_glass") {
+        nextBreakGlassSessions += 1;
+      }
+    }
+
+    return {
+      openRequests: nextOpenRequests,
+      readyRequests: nextReadyRequests,
+      activeElevated: nextActiveElevated,
+      forcedRotationUsers: nextForcedRotationUsers,
+      activeSessions: nextActiveSessions,
+      breakGlassSessions: nextBreakGlassSessions,
+    };
+  }, [requests, sessions, users]);
   const hasAbnormalPressure = forcedRotationUsers > 0 || breakGlassSessions > 0;
 
   return (
@@ -458,107 +567,100 @@ export function SecurityPostureSection({
 
       {bootstrap ? (
         <article className="ff-sec-collapse">
-          <details>
-            <summary className="ff-sec-collapse-trigger">
+          <DeferredSecurityDetails
+            summary={(
               <span>
                 Bootstrap baseline
                 <span className="fg-pill" style={{ marginLeft: "0.5rem" }} data-tone={bootstrap.default_password_in_use ? "danger" : "success"}>
                   {bootstrap.default_password_in_use ? "Default password active" : "Bootstrap rotated"}
                 </span>
               </span>
-            </summary>
-            <div className="ff-sec-collapse-body">
-              <KeyValueList
-                items={[
-                  { label: "Bootstrap account", value: bootstrap.bootstrap_username },
-                  { label: "Default password", value: bootstrap.default_password_in_use ? "Still in use" : "Rotated" },
-                  { label: "Must rotate", value: bootstrap.must_rotate_password ? "Yes" : "No" },
-                  { label: "Admin users", value: String(bootstrap.admin_user_count) },
-                  { label: "Active sessions", value: String(bootstrap.active_session_count) },
-                  { label: "Governance storage", value: bootstrap.governance_storage_backend },
-                ]}
-              />
-            </div>
-          </details>
+            )}
+          >
+            <KeyValueList
+              items={[
+                { label: "Bootstrap account", value: bootstrap.bootstrap_username },
+                { label: "Default password", value: bootstrap.default_password_in_use ? "Still in use" : "Rotated" },
+                { label: "Must rotate", value: bootstrap.must_rotate_password ? "Yes" : "No" },
+                { label: "Admin users", value: String(bootstrap.admin_user_count) },
+                { label: "Active sessions", value: String(bootstrap.active_session_count) },
+                { label: "Governance storage", value: bootstrap.governance_storage_backend },
+              ]}
+            />
+          </DeferredSecurityDetails>
         </article>
       ) : null}
 
       {canViewAdminTabs && (hasAbnormalPressure || users.length > 0) ? (
         <article className="ff-sec-collapse">
-          <details>
-            <summary className="ff-sec-collapse-trigger">
+          <DeferredSecurityDetails
+            summary={(
               <span>
                 Privileged identity pressure
                 {forcedRotationUsers > 0 ? (
                   <span className="fg-pill" style={{ marginLeft: "0.5rem" }} data-tone="warning">{forcedRotationUsers} forced rotations</span>
                 ) : null}
               </span>
-            </summary>
-            <div className="ff-sec-collapse-body">
-              <KeyValueList
-                items={[
-                  { label: "Admin users", value: String(users.length) },
-                  { label: "Active sessions", value: String(activeSessions) },
-                  { label: "Break-glass sessions", value: String(breakGlassSessions) },
-                  { label: "Password reset pressure", value: `${forcedRotationUsers} users must rotate` },
-                ]}
-              />
-            </div>
-          </details>
+            )}
+          >
+            <KeyValueList
+              items={[
+                { label: "Admin users", value: String(users.length) },
+                { label: "Active sessions", value: String(activeSessions) },
+                { label: "Break-glass sessions", value: String(breakGlassSessions) },
+                { label: "Password reset pressure", value: `${forcedRotationUsers} users must rotate` },
+              ]}
+            />
+          </DeferredSecurityDetails>
         </article>
       ) : null}
 
       {credentialPolicy ? (
         <article className="ff-sec-collapse">
-          <details>
-            <summary className="ff-sec-collapse-trigger">
-              Credential policy details &mdash; TTLs, impersonation limits, service account key rules
-            </summary>
-            <div className="ff-sec-collapse-body">
-              <article className="fg-card" style={{ border: "none", padding: 0, background: "transparent" }}>
-                <h4>Human sessions</h4>
-                <KeyValueList
-                  items={[
-                    { label: "TTL", value: `${credentialPolicy.human_sessions?.ttl_hours ?? "Not recorded"} hours` },
-                    { label: "Rotation trigger", value: String(credentialPolicy.human_sessions?.rotation_trigger ?? "Not recorded") },
-                  ]}
-                />
-              </article>
-              <article className="fg-card" style={{ border: "none", padding: 0, background: "transparent", marginTop: "var(--fg-space-3)" }}>
-                <h4>Exception session policies</h4>
-                <KeyValueList
-                  items={[
-                    {
-                      label: "Approval TTL",
-                      value: credentialPolicy.elevated_access_requests
-                        ? `${credentialPolicy.elevated_access_requests.approval_ttl_minutes} minutes`
-                        : "Not recorded",
-                    },
-                    {
-                      label: "Break-glass max TTL",
-                      value: credentialPolicy.break_glass_sessions
-                        ? `${credentialPolicy.break_glass_sessions.max_ttl_minutes} minutes`
-                        : "Not recorded",
-                    },
-                    {
-                      label: "Impersonation max TTL",
-                      value: credentialPolicy.impersonation_sessions
-                        ? `${credentialPolicy.impersonation_sessions.max_ttl_minutes} minutes`
-                        : "Not recorded",
-                    },
-                    {
-                      label: "Impersonation write posture",
-                      value: credentialPolicy.impersonation_sessions
-                        ? credentialPolicy.impersonation_sessions.read_only
-                          ? "Read-only"
-                          : "Writable"
-                        : "Not recorded",
-                    },
-                  ]}
-                />
-              </article>
-            </div>
-          </details>
+          <DeferredSecurityDetails summary="Credential policy details — TTLs, impersonation limits, service account key rules">
+            <article className="fg-card" style={{ border: "none", padding: 0, background: "transparent" }}>
+              <h4>Human sessions</h4>
+              <KeyValueList
+                items={[
+                  { label: "TTL", value: `${credentialPolicy.human_sessions?.ttl_hours ?? "Not recorded"} hours` },
+                  { label: "Rotation trigger", value: String(credentialPolicy.human_sessions?.rotation_trigger ?? "Not recorded") },
+                ]}
+              />
+            </article>
+            <article className="fg-card" style={{ border: "none", padding: 0, background: "transparent", marginTop: "var(--fg-space-3)" }}>
+              <h4>Exception session policies</h4>
+              <KeyValueList
+                items={[
+                  {
+                    label: "Approval TTL",
+                    value: credentialPolicy.elevated_access_requests
+                      ? `${credentialPolicy.elevated_access_requests.approval_ttl_minutes} minutes`
+                      : "Not recorded",
+                  },
+                  {
+                    label: "Break-glass max TTL",
+                    value: credentialPolicy.break_glass_sessions
+                      ? `${credentialPolicy.break_glass_sessions.max_ttl_minutes} minutes`
+                      : "Not recorded",
+                  },
+                  {
+                    label: "Impersonation max TTL",
+                    value: credentialPolicy.impersonation_sessions
+                      ? `${credentialPolicy.impersonation_sessions.max_ttl_minutes} minutes`
+                      : "Not recorded",
+                  },
+                  {
+                    label: "Impersonation write posture",
+                    value: credentialPolicy.impersonation_sessions
+                      ? credentialPolicy.impersonation_sessions.read_only
+                        ? "Read-only"
+                        : "Writable"
+                      : "Not recorded",
+                  },
+                ]}
+              />
+            </article>
+          </DeferredSecurityDetails>
         </article>
       ) : null}
     </div>

@@ -291,10 +291,9 @@ describe("OAuth targets page", () => {
       }),
     );
 
-    expect(markup).toContain('href="/providers?instanceId=instance_alpha"');
-    expect(markup).toContain('href="/harness?instanceId=instance_alpha"');
-    expect(markup).toContain('href="/dashboard?instanceId=instance_alpha"');
-    expect(markup).toContain('href="/usage?instanceId=instance_alpha"');
+    expect(markup).toContain("Route Diagnostics");
+    expect(markup).not.toContain('href="/providers?instanceId=instance_alpha"');
+    expect(markup).not.toContain('href="/harness?instanceId=instance_alpha"');
   });
 
   it("keeps probe controls for operate-only access but reserves bridge sync for write-capable sessions", () => {
@@ -313,13 +312,12 @@ describe("OAuth targets page", () => {
       }),
     );
 
-    expect(alphaMarkup).toContain("Operator mutations enabled");
     expect(alphaMarkup).toContain("Probe all targets");
     expect(alphaMarkup).toContain("Sync bridge profiles");
     expect(betaMarkup).not.toContain("Operator mutations enabled");
     expect(betaMarkup).toContain("Probe all targets");
     expect(betaMarkup).not.toContain("Sync bridge profiles");
-    expect(betaMarkup).toContain("Operate only");
+    expect(betaMarkup).toContain("Bridge-profile sync requires write capability");
   });
 
   it("shows an honest blocked state when the session lacks scoped providers.read", () => {

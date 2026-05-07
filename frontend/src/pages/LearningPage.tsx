@@ -90,10 +90,10 @@ export function LearningPage() {
       <ReviewQueuePage
         eyebrow="Work Interaction"
         title="Learning"
-        description="ForgeFrame is restoring learning-review state."
+        description="Restoring learning-review state."
         isEmpty
         emptyTitle="Checking access"
-        emptyDescription="ForgeFrame waits for session state before opening the learning review surface."
+        emptyDescription="Waiting for session state before opening learning review."
       />
     );
   }
@@ -104,10 +104,10 @@ export function LearningPage() {
       <ReviewQueuePage
         eyebrow="Work Interaction"
         title="Learning"
-        description="This route is reserved for operators and admins who can inspect real learning and memory-promotion truth."
+        description="Operator or admin access required to inspect learning truth."
         isEmpty
         emptyTitle="Operator or admin required"
-        emptyDescription="ForgeFrame does not render cosmetic learning suggestions without scoped access."
+        emptyDescription="Learning suggestions require scoped access."
       />
     );
   }
@@ -117,7 +117,7 @@ export function LearningPage() {
       <ReviewQueuePage
         eyebrow="Work Interaction"
         title="Learning"
-        description="Review learning suggestions before they become memory, draft skills, or historical records."
+        description="Review suggestions before they become memory, skills, or records."
         attentionItems={attentionItems}
         summaryItems={summaryItems}
         actions={actions}

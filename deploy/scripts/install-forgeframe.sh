@@ -1,0 +1,1999 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=./lib/forgeframe-env.sh
+source "$ROOT_DIR/deploy/scripts/lib/forgeframe-env.sh"
+FORGEFRAME_NULL_DEVICE="$(forgeframe_null_device)"
+
+HOST_ENV_EXAMPLE="$ROOT_DIR/deploy/env/forgeframe-host.env.example"
+SYSTEMD_TEMPLATE_DIR="$ROOT_DIR/deploy/systemd"
+
+INSTALL_ROOT="${FORGEFRAME_INSTALL_ROOT:-$ROOT_DIR}"
+CONFIG_DIR="${FORGEFRAME_CONFIG_DIR:-/etc/forgeframe}"
+STATE_DIR="${FORGEFRAME_STATE_DIR:-/var/lib/forgeframe}"
+LOG_DIR="${FORGEFRAME_LOG_DIR:-/var/log/forgeframe}"
+UNIT_DIR="${FORGEFRAME_SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
+ENV_FILE="${FORGEFRAME_ENV_FILE:-$CONFIG_DIR/forgeframe.env}"
+ENV_FILE_EXPLICIT=0
+[[ -n "${FORGEFRAME_ENV_FILE:-}" ]] && ENV_FILE_EXPLICIT=1
+SYSTEM_USER="${FORGEFRAME_SYSTEM_USER:-forgeframe}"
+SYSTEM_GROUP="${FORGEFRAME_SYSTEM_GROUP:-forgeframe}"
+SKIP_SYSTEM_DEPS="${FORGEFRAME_INSTALL_SKIP_SYSTEM_DEPS:-0}"
+SKIP_SYSTEM_USER="${FORGEFRAME_INSTALL_SKIP_SYSTEM_USER:-0}"
+SKIP_PYTHON_ENV="${FORGEFRAME_INSTALL_SKIP_PYTHON_ENV:-0}"
+SKIP_FRONTEND_BUILD="${FORGEFRAME_INSTALL_SKIP_FRONTEND_BUILD:-0}"
+SKIP_SYSTEMCTL="${FORGEFRAME_INSTALL_SKIP_SYSTEMCTL:-0}"
+ALLOW_FILE_STORAGE="${FORGEFRAME_INSTALL_ALLOW_FILE_STORAGE:-0}"
+DRY_RUN=0
+GUIDED=0
+PORT_INCREMENT="${FORGEFRAME_INSTALL_PORT_INCREMENT:-10}"
+APT_UPDATED=0
+SELECTED_PYTHON_BIN="${FORGEFRAME_PYTHON_BIN:-}"
+APT_GET=(apt-get -o APT::Sandbox::User=root)
+NON_INTERACTIVE="${FORGEFRAME_NON_INTERACTIVE:-0}"
+
+INSTALLER_PUBLIC_FQDN=""
+INSTALLER_ACME_EMAIL=""
+INSTALLER_ADMIN_USERNAME=""
+INSTALLER_ADMIN_PASSWORD=""
+INSTALLER_API_PORT=""
+INSTALLER_PG_MODE=""
+INSTALLER_PG_HOST=""
+INSTALLER_PG_PORT=""
+INSTALLER_PG_DB=""
+INSTALLER_PG_USER=""
+INSTALLER_PG_PASSWORD=""
+INSTALLER_PG_CONTAINER_NAME=""
+INSTALLER_PG_CLUSTER_NAME=""
+INSTALLER_OLLAMA_BASE_URL=""
+
+log() { printf '[forgeframe-install] %s\n' "$*" >&2; }
+fail() { printf '[forgeframe-install][ERROR] %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+Usage: deploy/scripts/install-forgeframe.sh [options]
+
+Options:
+  --guided              Ask the operator for all login-critical host install values.
+  --install-root PATH   Override the ForgeFrame working tree used by systemd.
+  --config-dir PATH     Override the directory that stores forgeframe.env.
+  --state-dir PATH      Override the state directory for ForgeFrame runtime data.
+  --log-dir PATH        Override the log directory.
+  --unit-dir PATH       Override the systemd unit installation directory.
+  --env-file PATH       Override the installed host-native environment file path.
+  --system-user NAME    Override the runtime system user.
+  --system-group NAME   Override the runtime system group.
+  --skip-system-deps    Do not install or upgrade missing host packages.
+  --skip-system-user    Do not create a dedicated system user; use the current user/group.
+  --allow-file-storage  Allow the explicit limited-exception file/SQLite storage path.
+  --dry-run             Print the planned host-native installation without changing the host.
+  --skip-python-env     Skip venv creation and backend dependency installation.
+  --skip-frontend-build Skip frontend build installation checks.
+  --skip-systemctl      Skip daemon-reload, service enable/start, certificate request, and smoke validation.
+EOF
+}
+
+require_root_for_system_packages() {
+  [[ "$SKIP_SYSTEM_DEPS" == "1" ]] && return 0
+  [[ "$(id -u)" -eq 0 ]] || fail "Installing missing system dependencies requires root. Re-run as root or pass --skip-system-deps."
+}
+
+apt_install_packages() {
+  local packages=("$@")
+  local apt_log
+
+  (( ${#packages[@]} > 0 )) || return 0
+  [[ "$SKIP_SYSTEM_DEPS" == "1" ]] && return 0
+  forgeframe_command_exists apt-get || fail "Automatic system dependency installation currently supports apt-based Linux hosts only."
+  require_root_for_system_packages
+  apt_log="$(mktemp "${TMPDIR:-/tmp}/forgeframe-apt.XXXXXX.log")"
+  if [[ "$APT_UPDATED" != "1" ]]; then
+    if ! DEBIAN_FRONTEND=noninteractive "${APT_GET[@]}" update >"$apt_log" 2>&1; then
+      cat "$apt_log" >&2
+      rm -f "$apt_log"
+      fail "apt-get update failed. Native PostgreSQL installation requires reachable Ubuntu package sources."
+    fi
+    if grep -Eq "Failed to fetch|Temporary failure resolving|Some index files failed" "$apt_log"; then
+      cat "$apt_log" >&2
+      rm -f "$apt_log"
+      fail "apt-get update could not refresh package indexes. Native PostgreSQL installation requires working DNS/network access to Ubuntu package sources."
+    fi
+    APT_UPDATED=1
+  fi
+  if ! DEBIAN_FRONTEND=noninteractive "${APT_GET[@]}" install -y "${packages[@]}" >"$apt_log" 2>&1; then
+    cat "$apt_log" >&2
+    rm -f "$apt_log"
+    fail "apt-get install failed for packages: ${packages[*]}"
+  fi
+  rm -f "$apt_log"
+}
+
+apt_package_available() {
+  forgeframe_command_exists apt-cache || return 1
+  apt-cache show "$1" >"$FORGEFRAME_NULL_DEVICE" 2>&1
+}
+
+ensure_bootstrap_python() {
+  if forgeframe_command_exists python3; then
+    return 0
+  fi
+  apt_install_packages python3 python3-venv python3-pip
+  forgeframe_command_exists python3 || fail "python3 is required."
+}
+
+python_version_supported() {
+  local python_bin="$1"
+
+  "$python_bin" - <<'PY'
+import sys
+
+major, minor = sys.version_info[:2]
+raise SystemExit(0 if (major, minor) >= (3, 11) else 1)
+PY
+}
+
+python_major_minor() {
+  local python_bin="$1"
+
+  "$python_bin" - <<'PY'
+import sys
+
+major, minor = sys.version_info[:2]
+print(f"{major}.{minor}")
+PY
+}
+
+ensure_supported_python_runtime() {
+  local candidate
+
+  if [[ -n "$SELECTED_PYTHON_BIN" && -x "$SELECTED_PYTHON_BIN" ]] && python_version_supported "$SELECTED_PYTHON_BIN"; then
+    return 0
+  fi
+
+  if forgeframe_command_exists python3 && python_version_supported "$(command -v python3)"; then
+    SELECTED_PYTHON_BIN="$(command -v python3)"
+  fi
+  if [[ -n "$SELECTED_PYTHON_BIN" ]]; then
+    return 0
+  fi
+
+  for candidate in /usr/bin/python3.12 /usr/bin/python3.11 python3.12 python3.11; do
+    if forgeframe_command_exists "$candidate" && python_version_supported "$(command -v "$candidate")"; then
+      SELECTED_PYTHON_BIN="$(command -v "$candidate")"
+      return 0
+    fi
+  done
+
+  if [[ "$SKIP_SYSTEM_DEPS" == "1" ]]; then
+    fail "ForgeFrame requires Python 3.11 or newer on the target host. No compatible interpreter was found and --skip-system-deps forbids automatic installation."
+  fi
+
+  for candidate in python3.12 python3.11; do
+    if apt_package_available "$candidate"; then
+      apt_install_packages "$candidate"
+      if apt_package_available "${candidate}-venv"; then
+        apt_install_packages "${candidate}-venv"
+      fi
+      if forgeframe_command_exists "$candidate" && python_version_supported "$(command -v "$candidate")"; then
+        SELECTED_PYTHON_BIN="$(command -v "$candidate")"
+        break
+      fi
+    fi
+  done
+
+  [[ -n "$SELECTED_PYTHON_BIN" ]] || fail "ForgeFrame requires Python 3.11 or newer on the target host."
+}
+
+ensure_python_venv_support() {
+  local version
+  local versioned_venv
+
+  ensure_supported_python_runtime
+  apt_install_packages python3-venv python3-pip
+  version="$(python_major_minor "$SELECTED_PYTHON_BIN")"
+  versioned_venv="python${version}-venv"
+  if apt_package_available "$versioned_venv"; then
+    apt_install_packages "$versioned_venv"
+  fi
+}
+
+node_major_version() {
+  node -p "process.versions.node.split('.')[0]"
+}
+
+ensure_nodejs_runtime() {
+  local node_major=""
+
+  if forgeframe_command_exists node; then
+    node_major="$(node_major_version 2>"$FORGEFRAME_NULL_DEVICE" || true)"
+  fi
+  if forgeframe_command_exists node && forgeframe_command_exists npm && [[ "$node_major" =~ ^[0-9]+$ ]] && (( node_major >= 20 )); then
+    return 0
+  fi
+
+  apt_install_packages ca-certificates curl gnupg
+  require_root_for_system_packages
+  curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >"$FORGEFRAME_NULL_DEVICE"
+  APT_UPDATED=0
+  apt_install_packages nodejs
+
+  node_major="$(node_major_version 2>"$FORGEFRAME_NULL_DEVICE" || true)"
+  forgeframe_command_exists npm || fail "npm is required after installing nodejs."
+  [[ "$node_major" =~ ^[0-9]+$ ]] && (( node_major >= 20 )) || fail "ForgeFrame frontend build requires Node.js 20 or newer."
+}
+
+ensure_docker_runtime() {
+  if ! forgeframe_command_exists docker; then
+    apt_install_packages docker.io
+  fi
+  if forgeframe_command_exists systemctl && ! docker info >"$FORGEFRAME_NULL_DEVICE" 2>&1; then
+    systemctl enable --now docker >"$FORGEFRAME_NULL_DEVICE" 2>&1 || fail "docker is installed but could not be started."
+  fi
+  docker info >"$FORGEFRAME_NULL_DEVICE" 2>&1 || fail "docker is installed but the daemon is not reachable."
+  forgeframe_command_exists docker || fail "docker is required when PostgreSQL mode is 'docker'."
+}
+
+ensure_native_postgres_packages() {
+  apt_install_packages postgresql postgresql-client postgresql-common
+}
+
+ensure_base_host_packages() {
+  apt_install_packages curl ca-certificates openssl certbot postgresql-client
+}
+
+ensure_system_dependencies() {
+  local pg_mode="${INSTALLER_PG_MODE:-${FORGEFRAME_PG_MODE:-native}}"
+
+  if [[ "$SKIP_SYSTEM_DEPS" == "1" ]]; then
+    ensure_supported_python_runtime
+    return 0
+  fi
+
+  ensure_python_venv_support
+  ensure_base_host_packages
+  if [[ "$SKIP_FRONTEND_BUILD" != "1" ]]; then
+    ensure_nodejs_runtime
+  fi
+  case "$pg_mode" in
+    native)
+      ensure_native_postgres_packages
+      ;;
+    docker)
+      ensure_docker_runtime
+      ;;
+    file)
+      [[ "$ALLOW_FILE_STORAGE" == "1" ]] || fail "PostgreSQL mode 'file' is only allowed with --allow-file-storage for limited exception installs."
+      ;;
+    existing)
+      ;;
+    *)
+      fail "Unsupported PostgreSQL mode '$pg_mode'."
+      ;;
+  esac
+}
+
+normalize_installer_value() {
+  local raw="${1-}"
+
+  raw="${raw//$'\r'/}"
+  raw="${raw//$'\n'/}"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  if [[ "${#raw}" -ge 2 && "$raw" == \"*\" && "$raw" == *\" ]]; then
+    raw="${raw:1:${#raw}-2}"
+  elif [[ "${#raw}" -ge 2 && "$raw" == \'*\' && "$raw" == *\' ]]; then
+    raw="${raw:1:${#raw}-2}"
+  fi
+
+  printf '%s\n' "$raw"
+}
+
+write_local_env_mirrors() {
+  local mirror_paths=(
+    "$INSTALL_ROOT/.env.host"
+    "$INSTALL_ROOT/.env"
+    "$INSTALL_ROOT/backend/.env"
+  )
+  local mirror_path
+
+  [[ -f "$ENV_FILE" ]] || fail "Cannot mirror installer environment because $ENV_FILE does not exist."
+
+  for mirror_path in "${mirror_paths[@]}"; do
+    mkdir -p "$(dirname "$mirror_path")"
+    cp "$ENV_FILE" "$mirror_path"
+    chmod 600 "$mirror_path"
+    if [[ "$(id -u)" -eq 0 ]]; then
+      chown "$SYSTEM_USER:$SYSTEM_GROUP" "$mirror_path"
+    fi
+    log "Wrote ignored runtime env mirror $mirror_path"
+  done
+}
+
+write_local_env_examples() {
+  local example_paths=(
+    "$INSTALL_ROOT/.env.host.example"
+    "$INSTALL_ROOT/.env.example"
+    "$INSTALL_ROOT/backend/.env.example"
+  )
+  local example_path
+
+  [[ -f "$ENV_FILE" ]] || fail "Cannot render local env examples because $ENV_FILE does not exist."
+
+  for example_path in "${example_paths[@]}"; do
+    mkdir -p "$(dirname "$example_path")"
+    python3 - "$ENV_FILE" "$example_path" <<'PY'
+import sys
+from pathlib import Path
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
+
+source_path = Path(sys.argv[1])
+target_path = Path(sys.argv[2])
+lines = source_path.read_text(encoding="utf-8").splitlines()
+
+secret_placeholders = {
+    "FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD": "replace-with-a-generated-bootstrap-password",
+    "FORGEFRAME_PG_PASSWORD": "replace-with-a-generated-postgres-password",
+    "FORGEFRAME_OPENAI_API_KEY": "replace-with-openai-api-key",
+    "FORGEFRAME_OPENAI_CODEX_API_KEY": "replace-with-openai-codex-api-key",
+    "FORGEFRAME_OPENAI_CODEX_OAUTH_ACCESS_TOKEN": "replace-with-openai-codex-oauth-access-token",
+    "FORGEFRAME_GEMINI_API_KEY": "replace-with-gemini-api-key",
+    "FORGEFRAME_GEMINI_OAUTH_ACCESS_TOKEN": "replace-with-gemini-oauth-access-token",
+    "FORGEFRAME_ANTHROPIC_API_KEY": "replace-with-anthropic-api-key",
+    "FORGEFRAME_ANTHROPIC_BEARER_TOKEN": "replace-with-anthropic-bearer-token",
+    "FORGEFRAME_BEDROCK_ACCESS_KEY_ID": "replace-with-bedrock-access-key-id",
+    "FORGEFRAME_BEDROCK_SECRET_ACCESS_KEY": "replace-with-bedrock-secret-access-key",
+    "FORGEFRAME_BEDROCK_SESSION_TOKEN": "replace-with-bedrock-session-token",
+    "FORGEFRAME_ANTIGRAVITY_OAUTH_ACCESS_TOKEN": "replace-with-antigravity-oauth-access-token",
+    "FORGEFRAME_GITHUB_COPILOT_OAUTH_ACCESS_TOKEN": "replace-with-github-copilot-oauth-access-token",
+    "FORGEFRAME_CLAUDE_CODE_OAUTH_ACCESS_TOKEN": "replace-with-claude-code-oauth-access-token",
+    "FORGEFRAME_NOUS_OAUTH_ACCESS_TOKEN": "replace-with-nous-oauth-access-token",
+    "FORGEFRAME_NOUS_OAUTH_RUNTIME_AGENT_KEY": "replace-with-nous-runtime-agent-key",
+    "FORGEFRAME_QWEN_OAUTH_ACCESS_TOKEN": "replace-with-qwen-oauth-access-token",
+}
+postgres_url_keys = {
+    "FORGEFRAME_POSTGRES_URL",
+    "FORGEFRAME_HARNESS_POSTGRES_URL",
+    "FORGEFRAME_CONTROL_PLANE_POSTGRES_URL",
+    "FORGEFRAME_OBSERVABILITY_POSTGRES_URL",
+    "FORGEFRAME_GOVERNANCE_POSTGRES_URL",
+    "FORGEFRAME_INSTANCES_POSTGRES_URL",
+    "FORGEFRAME_EXECUTION_POSTGRES_URL",
+}
+
+
+def scrub_postgres_url(value: str) -> str:
+    stripped = value.strip().strip("'").strip('"')
+    if not stripped:
+        return "postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe"
+    scheme = "postgresql"
+    if "://" in stripped:
+        candidate_scheme = stripped.split("://", 1)[0].strip()
+        if candidate_scheme:
+            scheme = candidate_scheme
+    try:
+        parts = urlsplit(stripped)
+    except ValueError:
+        return f"{scheme}://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe"
+    username = unquote(parts.username) if parts.username else "forgeframe"
+    password = "replace-with-a-generated-postgres-password"
+    hostname = parts.hostname or "127.0.0.1"
+    if ":" in hostname and not hostname.startswith("["):
+        hostname = f"[{hostname}]"
+    try:
+        parsed_port = parts.port
+    except ValueError:
+        return f"{scheme}://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe"
+    port = f":{parsed_port}" if parsed_port else ""
+    netloc = f"{quote(username, safe='')}:{quote(password, safe='')}@{hostname}{port}"
+    path = parts.path or "/forgeframe"
+    return urlunsplit((parts.scheme or scheme, netloc, path, parts.query, parts.fragment))
+
+
+updated_lines: list[str] = []
+for raw_line in lines:
+    line = raw_line.strip()
+    if not line or line.startswith("#") or "=" not in raw_line:
+      updated_lines.append(raw_line)
+      continue
+
+    key, _, raw_value = raw_line.partition("=")
+    normalized_key = key.strip()
+    value = raw_value.strip()
+    if normalized_key in postgres_url_keys:
+        value = scrub_postgres_url(value)
+    elif normalized_key in secret_placeholders:
+        value = secret_placeholders[normalized_key]
+    updated_lines.append(f"{normalized_key}={value}")
+
+target_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+PY
+    chmod 644 "$example_path"
+    if [[ "$(id -u)" -eq 0 ]]; then
+      chown "$SYSTEM_USER:$SYSTEM_GROUP" "$example_path"
+    fi
+    log "Wrote local env example $example_path"
+  done
+}
+
+render_embedded_systemd_template() {
+  local unit_name="$1"
+
+  case "$unit_name" in
+    forgeframe-acme.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame ACME certificate renewal
+After=network-online.target forgeframe-http-helper.service
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+ExecStart=@@INSTALL_ROOT@@/deploy/scripts/renew-certificates.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@
+StandardOutput=journal
+StandardError=journal
+EOF
+      ;;
+    forgeframe-acme.timer)
+      cat <<'EOF'
+[Unit]
+Description=Run ForgeFrame ACME renewal every 12 hours
+
+[Timer]
+OnBootSec=10m
+OnUnitActiveSec=12h
+Unit=forgeframe-acme.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+      ;;
+    forgeframe-api.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame API runtime
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=simple
+User=@@SYSTEM_USER@@
+Group=@@SYSTEM_GROUP@@
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+Environment=FORGEFRAME_RUNTIME_MODE=host_native
+ExecStart=@@INSTALL_ROOT@@/deploy/scripts/start-forgeframe.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@ @@INSTALL_ROOT@@/backend/.forgeframe
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+      ;;
+    forgeframe-http-helper.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame ACME helper listener on port 80
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+ExecStart=@@INSTALL_ROOT@@/deploy/scripts/start-http-helper.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+      ;;
+    forgeframe-public.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame public HTTPS listener
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+ExecStart=@@INSTALL_ROOT@@/deploy/scripts/start-public-forgeframe.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@ @@INSTALL_ROOT@@/backend/.forgeframe
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+      ;;
+    forgeframe-retention.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame retention maintenance
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=oneshot
+User=@@SYSTEM_USER@@
+Group=@@SYSTEM_GROUP@@
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+ExecStart=@@INSTALL_ROOT@@/.venv/bin/python @@INSTALL_ROOT@@/deploy/scripts/run-history-retention.py --apply
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@ @@INSTALL_ROOT@@/backend/.forgeframe
+StandardOutput=journal
+StandardError=journal
+EOF
+      ;;
+    forgeframe-retention.timer)
+      cat <<'EOF'
+[Unit]
+Description=Run ForgeFrame retention maintenance every hour
+
+[Timer]
+OnBootSec=15m
+OnUnitActiveSec=1h
+Unit=forgeframe-retention.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+      ;;
+    forgeframe-worker.service)
+      cat <<'EOF'
+[Unit]
+Description=ForgeFrame execution worker
+After=network-online.target forgeframe-api.service
+Wants=network-online.target
+ConditionPathExists=@@ENV_FILE@@
+
+[Service]
+Type=simple
+User=@@SYSTEM_USER@@
+Group=@@SYSTEM_GROUP@@
+WorkingDirectory=@@INSTALL_ROOT@@
+Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
+Environment=FORGEFRAME_RUNTIME_MODE=host_native
+ExecStart=@@INSTALL_ROOT@@/.venv/bin/python @@INSTALL_ROOT@@/deploy/scripts/run-execution-worker.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=@@STATE_DIR@@ @@INSTALL_ROOT@@/backend/.forgeframe
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+      ;;
+    *)
+      fail "No embedded systemd template is available for $unit_name"
+      ;;
+  esac
+}
+
+install_systemd_units() {
+  local unit_name
+  local template_path
+  local target_path
+  local used_embedded=0
+  local units=(
+    forgeframe-acme.service
+    forgeframe-acme.timer
+    forgeframe-api.service
+    forgeframe-http-helper.service
+    forgeframe-public.service
+    forgeframe-retention.service
+    forgeframe-retention.timer
+    forgeframe-worker.service
+  )
+
+  for unit_name in "${units[@]}"; do
+    target_path="$UNIT_DIR/$unit_name"
+    template_path="$SYSTEMD_TEMPLATE_DIR/$unit_name"
+    if [[ -f "$template_path" ]]; then
+      sed \
+        -e "s#@@INSTALL_ROOT@@#$INSTALL_ROOT#g" \
+        -e "s#@@ENV_FILE@@#$ENV_FILE#g" \
+        -e "s#@@STATE_DIR@@#$STATE_DIR#g" \
+        -e "s#@@LOG_DIR@@#$LOG_DIR#g" \
+        -e "s#@@SYSTEM_USER@@#$SYSTEM_USER#g" \
+        -e "s#@@SYSTEM_GROUP@@#$SYSTEM_GROUP#g" \
+        "$template_path" >"$target_path"
+      log "Installed $unit_name to $target_path"
+      continue
+    fi
+
+    used_embedded=1
+    render_embedded_systemd_template "$unit_name" | sed \
+      -e "s#@@INSTALL_ROOT@@#$INSTALL_ROOT#g" \
+      -e "s#@@ENV_FILE@@#$ENV_FILE#g" \
+      -e "s#@@STATE_DIR@@#$STATE_DIR#g" \
+      -e "s#@@LOG_DIR@@#$LOG_DIR#g" \
+      -e "s#@@SYSTEM_USER@@#$SYSTEM_USER#g" \
+      -e "s#@@SYSTEM_GROUP@@#$SYSTEM_GROUP#g" >"$target_path"
+    log "Installed embedded $unit_name to $target_path because $template_path was not available"
+  done
+
+  if [[ "$used_embedded" == "1" ]]; then
+    log "Completed systemd installation with embedded template fallback."
+  fi
+}
+
+start_guided_runtime_services() {
+  [[ "$GUIDED" == "1" ]] || return 0
+  [[ "$SKIP_SYSTEMCTL" == "1" ]] && {
+    log "Skipping guided service enable/start because --skip-systemctl was provided."
+    return 0
+  }
+
+  forgeframe_command_exists systemctl || fail "systemctl is required to enable and start the guided host installation."
+  [[ "$(id -u)" -eq 0 ]] || fail "Guided service enable/start requires root. Re-run as root or pass --skip-systemctl."
+  forgeframe_load_env_file "$ENV_FILE" || fail "Unable to load $ENV_FILE before starting services."
+
+  log "Enabling and starting internal ForgeFrame services."
+  systemctl enable forgeframe-api.service forgeframe-worker.service >"$FORGEFRAME_NULL_DEVICE"
+  systemctl restart forgeframe-api.service || fail "Failed to start forgeframe-api.service. Check: journalctl -u forgeframe-api.service --no-pager -n 120"
+  systemctl restart forgeframe-worker.service || fail "Failed to start forgeframe-worker.service. Check: journalctl -u forgeframe-worker.service --no-pager -n 120"
+  systemctl enable --now forgeframe-retention.timer >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to enable forgeframe-retention.timer."
+  log "Internal services are enabled and running."
+
+  log "Enabling ACME HTTP helper on port 80."
+  systemctl enable forgeframe-http-helper.service >"$FORGEFRAME_NULL_DEVICE"
+  systemctl restart forgeframe-http-helper.service || fail "Failed to start forgeframe-http-helper.service. Check: journalctl -u forgeframe-http-helper.service --no-pager -n 120"
+
+  log "Requesting or renewing the public TLS certificate for ${FORGEFRAME_PUBLIC_FQDN:-configured host}."
+  FORGEFRAME_ENV_FILE="$ENV_FILE" bash "$INSTALL_ROOT/deploy/scripts/renew-certificates.sh" || fail "Certificate request failed. Check ${FORGEFRAME_PUBLIC_TLS_LAST_ERROR_PATH:-the configured ACME last-error file} and journalctl -u forgeframe-http-helper.service."
+
+  log "Enabling and starting public HTTPS service plus ACME renewal timer."
+  systemctl enable forgeframe-public.service >"$FORGEFRAME_NULL_DEVICE"
+  systemctl restart forgeframe-public.service || fail "Failed to start forgeframe-public.service. Check: journalctl -u forgeframe-public.service --no-pager -n 120"
+  systemctl enable --now forgeframe-acme.timer >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to enable forgeframe-acme.timer."
+
+  log "Running public host smoke validation."
+  FORGEFRAME_ENV_FILE="$ENV_FILE" bash "$INSTALL_ROOT/deploy/scripts/host-smoke.sh" || fail "Host smoke validation failed."
+  forgeframe_load_env_file "$ENV_FILE" || fail "Unable to reload $ENV_FILE after host smoke validation."
+
+  log "Guided installation completed with running services and public HTTPS validation."
+  log "Frontend login: https://${FORGEFRAME_PUBLIC_FQDN}/"
+  log "Admin user: ${FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME:-admin}"
+  log "Admin password: ${FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD}"
+}
+
+require_runtime_install_tree() {
+  local missing=()
+  local required_paths=(
+    "$INSTALL_ROOT/deploy/scripts/start-forgeframe.sh"
+    "$INSTALL_ROOT/deploy/scripts/start-public-forgeframe.sh"
+    "$INSTALL_ROOT/deploy/scripts/start-http-helper.sh"
+    "$INSTALL_ROOT/deploy/scripts/renew-certificates.sh"
+    "$INSTALL_ROOT/deploy/scripts/run-history-retention.py"
+    "$INSTALL_ROOT/deploy/scripts/run-execution-worker.py"
+    "$INSTALL_ROOT/deploy/scripts/apply-storage-migrations.py"
+    "$INSTALL_ROOT/deploy/scripts/serve-acme-http.py"
+    "$INSTALL_ROOT/backend/pyproject.toml"
+    "$INSTALL_ROOT/backend/app/main.py"
+  )
+  local path
+
+  for path in "${required_paths[@]}"; do
+    if [[ ! -e "$path" ]]; then
+      missing+=("$path")
+    fi
+  done
+
+  if [[ ! -f "$INSTALL_ROOT/frontend/dist/index.html" && ! -f "$INSTALL_ROOT/frontend/package.json" ]]; then
+    missing+=("$INSTALL_ROOT/frontend/dist/index.html|$INSTALL_ROOT/frontend/package.json")
+  fi
+
+  (( ${#missing[@]} == 0 )) || fail "Install root $INSTALL_ROOT is missing required runtime artifacts: ${missing[*]}"
+}
+
+install_host_env_template() {
+  local target_path="$1"
+
+  mkdir -p "$(dirname "$target_path")"
+  if [[ -f "$HOST_ENV_EXAMPLE" ]]; then
+    cp "$HOST_ENV_EXAMPLE" "$target_path"
+    log "Installed host-native environment template from $HOST_ENV_EXAMPLE to $target_path"
+    return 0
+  fi
+
+  cat >"$target_path" <<'EOF'
+# ForgeFrame host-native runtime defaults.
+# Copy this file to /etc/forgeframe/forgeframe.env via deploy/scripts/install-forgeframe.sh
+# and replace the placeholder values before enabling the services.
+#
+# The internal API service stays on loopback. The normative public product path is:
+#   https://<your-fqdn>/
+# on 0.0.0.0:443 with /v1 and /admin on the same origin, plus the port-80 ACME helper.
+
+FORGEFRAME_HOST=127.0.0.1
+FORGEFRAME_PORT=8080
+FORGEFRAME_API_BASE=/v1
+FORGEFRAME_FRONTEND_DIST_PATH=@@INSTALL_ROOT@@/frontend/dist
+FORGEFRAME_PUBLIC_FQDN=replace-with-public-fqdn.example.invalid
+FORGEFRAME_PUBLIC_HTTPS_HOST=0.0.0.0
+FORGEFRAME_PUBLIC_HTTPS_PORT=443
+FORGEFRAME_PUBLIC_HTTP_HELPER_HOST=0.0.0.0
+FORGEFRAME_PUBLIC_HTTP_HELPER_PORT=80
+FORGEFRAME_PUBLIC_ADMIN_BASE=/admin
+FORGEFRAME_PUBLIC_TLS_MODE=integrated_acme
+FORGEFRAME_PUBLIC_TLS_CERT_PATH=/etc/forgeframe/tls/live/fullchain.pem
+FORGEFRAME_PUBLIC_TLS_KEY_PATH=/etc/forgeframe/tls/live/privkey.pem
+FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH=/var/lib/forgeframe/acme-webroot
+FORGEFRAME_PUBLIC_TLS_STATE_PATH=/var/lib/forgeframe/tls
+FORGEFRAME_PUBLIC_TLS_LAST_ERROR_PATH=/var/lib/forgeframe/tls/last_error.txt
+FORGEFRAME_PUBLIC_TLS_RENEWAL_WINDOW_DAYS=30
+FORGEFRAME_PUBLIC_TLS_ACME_EMAIL=replace-with-acme-email@example.invalid
+FORGEFRAME_PUBLIC_TLS_ACME_DIRECTORY_URL=https://acme-v02.api.letsencrypt.org/directory
+
+FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME=admin
+FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD=replace-with-a-generated-bootstrap-password
+
+FORGEFRAME_HARNESS_STORAGE_BACKEND=postgresql
+FORGEFRAME_CONTROL_PLANE_STORAGE_BACKEND=postgresql
+FORGEFRAME_OBSERVABILITY_STORAGE_BACKEND=postgresql
+FORGEFRAME_GOVERNANCE_STORAGE_BACKEND=postgresql
+FORGEFRAME_INSTANCES_STORAGE_BACKEND=postgresql
+
+FORGEFRAME_PG_MODE=native
+FORGEFRAME_PG_HOST=127.0.0.1
+FORGEFRAME_PG_PORT=5432
+FORGEFRAME_PG_DB=forgeframe
+FORGEFRAME_PG_USER=forgeframe
+FORGEFRAME_PG_PASSWORD=replace-with-a-generated-postgres-password
+FORGEFRAME_PG_CONTAINER_NAME=
+FORGEFRAME_PG_CLUSTER_NAME=forgeframe
+FORGEFRAME_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_HARNESS_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_CONTROL_PLANE_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_OBSERVABILITY_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_GOVERNANCE_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_INSTANCES_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_EXECUTION_POSTGRES_URL=postgresql+psycopg://forgeframe:replace-with-a-generated-postgres-password@127.0.0.1:5432/forgeframe
+FORGEFRAME_EXECUTION_WORKER_INSTANCE_ID=
+FORGEFRAME_EXECUTION_WORKER_COMPANY_ID=
+FORGEFRAME_EXECUTION_WORKER_KEY=forgeframe-worker
+FORGEFRAME_EXECUTION_WORKER_EXECUTION_LANE=background_agentic
+FORGEFRAME_EXECUTION_WORKER_RUN_KIND=responses_background
+FORGEFRAME_EXECUTION_WORKER_POLL_INTERVAL_SECONDS=2
+FORGEFRAME_EXECUTION_WORKER_LEASE_TTL_SECONDS=300
+FORGEFRAME_EXECUTION_WORKER_HEARTBEAT_TTL_SECONDS=360
+
+FORGEFRAME_OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
+EOF
+  log "Installed embedded host-native environment template to $target_path because $HOST_ENV_EXAMPLE was not available"
+}
+
+require_valid_port() {
+  local value="$1"
+  local label="$2"
+
+  [[ "$value" =~ ^[0-9]+$ ]] || fail "$label must be a numeric TCP port."
+  (( value >= 1 && value <= 65535 )) || fail "$label must be between 1 and 65535."
+}
+
+port_listener_details() {
+  local port="$1"
+
+  if forgeframe_command_exists ss; then
+    ss -ltnp "( sport = :${port} )" 2>"$FORGEFRAME_NULL_DEVICE" | tail -n +2 || true
+    return 0
+  fi
+  if forgeframe_command_exists lsof; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>"$FORGEFRAME_NULL_DEVICE" || true
+    return 0
+  fi
+  if forgeframe_command_exists netstat; then
+    netstat -ltnp 2>"$FORGEFRAME_NULL_DEVICE" | awk -v target=":${port}" '$4 ~ target { print }' || true
+    return 0
+  fi
+  python3 - "$port" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+families = [socket.AF_INET]
+if socket.has_ipv6:
+    families.append(socket.AF_INET6)
+
+for family in families:
+    sock = socket.socket(family, socket.SOCK_STREAM)
+    sock.settimeout(0.2)
+    host = "127.0.0.1" if family == socket.AF_INET else "::1"
+    try:
+        if sock.connect_ex((host, port)) == 0:
+            print(f"listener:{host}:{port}")
+            raise SystemExit(0)
+    finally:
+        sock.close()
+PY
+}
+
+port_is_occupied() {
+  local port="$1"
+  [[ -n "$(port_listener_details "$port")" ]]
+}
+
+describe_port_listener() {
+  local port="$1"
+  local details
+
+  details="$(port_listener_details "$port")"
+  if [[ -n "$details" ]]; then
+    printf '%s\n' "$details" | head -n 1
+    return 0
+  fi
+  printf 'unknown listener on TCP/%s\n' "$port"
+}
+
+resolve_shifted_port() {
+  local candidate="$1"
+  local label="$2"
+
+  require_valid_port "$candidate" "$label"
+  require_valid_port "$PORT_INCREMENT" "FORGEFRAME_INSTALL_PORT_INCREMENT"
+
+  while port_is_occupied "$candidate"; do
+    local next_port=$((candidate + PORT_INCREMENT))
+    (( next_port <= 65535 )) || fail "$label exceeded the TCP port range while applying the +${PORT_INCREMENT} collision policy."
+    log "$label port $candidate is already occupied by $(describe_port_listener "$candidate"); switching to $next_port"
+    candidate="$next_port"
+  done
+
+  printf '%s\n' "$candidate"
+}
+
+require_enforced_port() {
+  local port="$1"
+  local label="$2"
+
+  require_valid_port "$port" "$label"
+  if port_is_occupied "$port"; then
+    fail "$label port $port is occupied by $(describe_port_listener "$port") and must remain fixed."
+  fi
+}
+
+prompt_value() {
+  local label="$1"
+  local default_value="$2"
+  local target_var="$3"
+  local response
+
+  if [[ -n "$default_value" ]]; then
+    read -r -p "$label [$default_value]: " response
+    response="${response:-$default_value}"
+  else
+    read -r -p "$label: " response
+  fi
+
+  printf -v "$target_var" '%s' "$response"
+}
+
+prompt_required() {
+  local label="$1"
+  local default_value="$2"
+  local target_var="$3"
+
+  while true; do
+    prompt_value "$label" "$default_value" "$target_var"
+    if [[ -n "${!target_var}" ]]; then
+      return 0
+    fi
+    log "$label is required."
+  done
+}
+
+prompt_secret_optional() {
+  local label="$1"
+  local target_var="$2"
+  local response
+  local confirm
+
+  while true; do
+    read -r -s -p "$label (leave blank to keep or auto-generate): " response
+    printf '\n'
+    if [[ -z "$response" ]]; then
+      printf -v "$target_var" '%s' ""
+      return 0
+    fi
+    read -r -s -p "Confirm $label: " confirm
+    printf '\n'
+    if [[ "$response" == "$confirm" ]]; then
+      printf -v "$target_var" '%s' "$response"
+      return 0
+    fi
+    log "$label values did not match."
+  done
+}
+
+prompt_yes_no() {
+  local label="$1"
+  local default_value="$2"
+  local target_var="$3"
+  local response
+  local normalized
+
+  while true; do
+    read -r -p "$label [$default_value]: " response
+    response="${response:-$default_value}"
+    normalized="$(printf '%s' "$response" | tr '[:upper:]' '[:lower:]')"
+    case "$normalized" in
+      y|yes)
+        printf -v "$target_var" '%s' "1"
+        return 0
+        ;;
+      n|no)
+        printf -v "$target_var" '%s' "0"
+        return 0
+        ;;
+    esac
+    log "Please answer yes or no."
+  done
+}
+
+prompt_postgres_mode() {
+  local default_value="$1"
+  local response
+  local normalized
+
+  while true; do
+    if [[ "$ALLOW_FILE_STORAGE" == "1" ]]; then
+      read -r -p "PostgreSQL mode [native/existing/docker/file] [$default_value]: " response
+    else
+      read -r -p "PostgreSQL mode [native/existing/docker] [$default_value]: " response
+    fi
+    response="${response:-$default_value}"
+    normalized="$(printf '%s' "$response" | tr '[:upper:]' '[:lower:]')"
+    case "$normalized" in
+      native|n|0)
+        INSTALLER_PG_MODE="native"
+        return 0
+        ;;
+      existing|e|1)
+        INSTALLER_PG_MODE="existing"
+        return 0
+        ;;
+      docker|d|2)
+        INSTALLER_PG_MODE="docker"
+        return 0
+        ;;
+      file|f|3)
+        [[ "$ALLOW_FILE_STORAGE" == "1" ]] || fail "PostgreSQL mode 'file' requires --allow-file-storage."
+        INSTALLER_PG_MODE="file"
+        return 0
+        ;;
+    esac
+    log "Choose 'native' for a Debian/Ubuntu-managed local PostgreSQL cluster, 'existing' for a reachable endpoint, 'docker' for a dedicated local PostgreSQL container, or 'file' only for an explicit limited exception."
+  done
+}
+
+wait_for_tcp_endpoint() {
+  local host="$1"
+  local port="$2"
+  local attempts="$3"
+  local label="$4"
+
+  require_valid_port "$port" "$label"
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if python3 - "$host" "$port" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+families = [socket.AF_UNSPEC]
+
+try:
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+except socket.gaierror:
+    raise SystemExit(1)
+
+for family, socktype, proto, _, sockaddr in infos:
+    sock = socket.socket(family, socktype, proto)
+    sock.settimeout(1.0)
+    try:
+        if sock.connect_ex(sockaddr) == 0:
+            raise SystemExit(0)
+    finally:
+        sock.close()
+
+raise SystemExit(1)
+PY
+    then
+      return 0
+    fi
+    sleep 1
+  done
+
+  fail "$label did not become reachable on ${host}:${port}."
+}
+
+validate_pg_identifier() {
+  local value="$1"
+  local label="$2"
+
+  [[ "$value" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || fail "$label '$value' is not a safe PostgreSQL identifier."
+}
+
+run_postgres_superuser() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    runuser -u postgres -- "$@"
+    return 0
+  fi
+  if forgeframe_command_exists sudo; then
+    sudo -u postgres "$@"
+    return 0
+  fi
+  fail "Provisioning native PostgreSQL requires root or sudo access to the postgres system account."
+}
+
+detect_native_postgres_version() {
+  local version=""
+
+  if forgeframe_command_exists pg_lsclusters; then
+    version="$(pg_lsclusters --no-header 2>"$FORGEFRAME_NULL_DEVICE" | awk 'NR==1 {print $1; exit}')"
+  fi
+  if [[ -z "$version" && -d /usr/lib/postgresql ]]; then
+    version="$(find /usr/lib/postgresql -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>"$FORGEFRAME_NULL_DEVICE" | sort -V | tail -n 1)"
+  fi
+  [[ -n "$version" ]] || fail "Unable to determine the installed PostgreSQL server version."
+  printf '%s\n' "$version"
+}
+
+provision_native_postgres() {
+  local version
+  local cluster_name="$INSTALLER_PG_CLUSTER_NAME"
+  local existing_line=""
+  local existing_port=""
+  local existing_status=""
+
+  validate_pg_identifier "$INSTALLER_PG_USER" "PostgreSQL role"
+  validate_pg_identifier "$INSTALLER_PG_DB" "PostgreSQL database"
+  [[ -n "$cluster_name" ]] || cluster_name="forgeframe"
+
+  version="$(detect_native_postgres_version)"
+  if forgeframe_command_exists pg_lsclusters; then
+    existing_line="$(pg_lsclusters --no-header 2>"$FORGEFRAME_NULL_DEVICE" | awk -v name="$cluster_name" '$2 == name {print; exit}')"
+  fi
+
+  if [[ -n "$existing_line" ]]; then
+    existing_port="$(awk '{print $3}' <<<"$existing_line")"
+    existing_status="$(awk '{print $4}' <<<"$existing_line")"
+    if [[ "$existing_port" != "$INSTALLER_PG_PORT" ]]; then
+      if [[ "$existing_status" == "down" ]] && forgeframe_command_exists pg_conftool; then
+        pg_conftool "$version" "$cluster_name" set port "$INSTALLER_PG_PORT" >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to update PostgreSQL cluster '$cluster_name' to port $INSTALLER_PG_PORT."
+        log "Updated native PostgreSQL cluster '$cluster_name' from port $existing_port to $INSTALLER_PG_PORT."
+      else
+        fail "Native PostgreSQL cluster '$cluster_name' already exists on port $existing_port, not the requested $INSTALLER_PG_PORT."
+      fi
+    fi
+  else
+    forgeframe_command_exists pg_createcluster || fail "pg_createcluster is required to provision a native PostgreSQL cluster."
+    pg_createcluster "$version" "$cluster_name" --port "$INSTALLER_PG_PORT" >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to create PostgreSQL cluster '$cluster_name'."
+  fi
+
+  pg_ctlcluster "$version" "$cluster_name" start >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to start PostgreSQL cluster '$cluster_name'."
+  wait_for_tcp_endpoint "127.0.0.1" "$INSTALLER_PG_PORT" 60 "Native PostgreSQL cluster"
+
+  run_postgres_superuser psql -p "$INSTALLER_PG_PORT" -d postgres -v ON_ERROR_STOP=1 -v ff_user="$INSTALLER_PG_USER" -v ff_password="$INSTALLER_PG_PASSWORD" <<'SQL' >"$FORGEFRAME_NULL_DEVICE"
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'ff_user', :'ff_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'ff_user') \gexec
+SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'ff_user', :'ff_password') \gexec
+SQL
+
+  run_postgres_superuser psql -p "$INSTALLER_PG_PORT" -d postgres -v ON_ERROR_STOP=1 -v ff_db="$INSTALLER_PG_DB" -v ff_user="$INSTALLER_PG_USER" <<'SQL' >"$FORGEFRAME_NULL_DEVICE"
+SELECT format('CREATE DATABASE %I OWNER %I', :'ff_db', :'ff_user')
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'ff_db') \gexec
+SQL
+
+  log "Provisioned native PostgreSQL cluster $cluster_name on 127.0.0.1:$INSTALLER_PG_PORT"
+}
+
+provision_managed_postgres() {
+  local container_name="$INSTALLER_PG_CONTAINER_NAME"
+  local host_port="$INSTALLER_PG_PORT"
+  local data_dir="$STATE_DIR/postgres"
+  local mapped_port
+
+  forgeframe_command_exists docker || fail "docker is required when PostgreSQL mode is 'docker'."
+  mkdir -p "$data_dir"
+
+  if docker inspect "$container_name" >"$FORGEFRAME_NULL_DEVICE" 2>&1; then
+    mapped_port="$(
+      docker inspect --format '{{with index .NetworkSettings.Ports "5432/tcp"}}{{(index . 0).HostPort}}{{end}}' "$container_name" 2>"$FORGEFRAME_NULL_DEVICE" || true
+    )"
+    if [[ -n "$mapped_port" && "$mapped_port" != "$host_port" ]]; then
+      fail "Managed PostgreSQL container '$container_name' already exists with host port $mapped_port, not the requested $host_port."
+    fi
+    docker start "$container_name" >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to start existing PostgreSQL container '$container_name'."
+    log "Reused managed PostgreSQL container $container_name on 127.0.0.1:$host_port"
+  else
+    docker run -d \
+      --name "$container_name" \
+      --restart unless-stopped \
+      -e "POSTGRES_DB=$INSTALLER_PG_DB" \
+      -e "POSTGRES_USER=$INSTALLER_PG_USER" \
+      -e "POSTGRES_PASSWORD=$INSTALLER_PG_PASSWORD" \
+      -p "127.0.0.1:${host_port}:5432" \
+      -v "$data_dir:/var/lib/postgresql/data" \
+      postgres:16 >"$FORGEFRAME_NULL_DEVICE" || fail "Failed to create managed PostgreSQL container '$container_name'."
+    log "Created managed PostgreSQL container $container_name on 127.0.0.1:$host_port"
+  fi
+
+  wait_for_tcp_endpoint "127.0.0.1" "$host_port" 60 "Managed PostgreSQL"
+}
+
+guided_collect_inputs() {
+  local default_fqdn="$(normalize_installer_value "${FORGEFRAME_PUBLIC_FQDN:-}")"
+  local default_acme_email="$(normalize_installer_value "${FORGEFRAME_PUBLIC_TLS_ACME_EMAIL:-}")"
+  local default_admin_username="$(normalize_installer_value "${FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME:-admin}")"
+  local default_api_port="$(normalize_installer_value "${FORGEFRAME_PORT:-8080}")"
+  local default_pg_mode="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_MODE:-${FORGEFRAME_PG_MODE:-native}}")"
+  local default_pg_host="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_HOST:-${FORGEFRAME_PG_HOST:-127.0.0.1}}")"
+  local default_pg_port="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_PORT:-${FORGEFRAME_PG_PORT:-5432}}")"
+  local default_pg_db="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_DB:-${FORGEFRAME_PG_DB:-forgeframe}}")"
+  local default_pg_user="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_USER:-${FORGEFRAME_PG_USER:-forgeframe}}")"
+  local default_pg_container="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_CONTAINER_NAME:-${FORGEFRAME_PG_CONTAINER_NAME:-forgeframe-postgres}}")"
+  local default_pg_cluster="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_CLUSTER_NAME:-${FORGEFRAME_PG_CLUSTER_NAME:-forgeframe}}")"
+  local configure_ollama
+  local ollama_host
+  local ollama_port
+  local ollama_scheme
+  local ollama_path
+
+  if forgeframe_is_placeholder_value "$default_fqdn"; then
+    default_fqdn=""
+  fi
+  if forgeframe_is_placeholder_value "$default_acme_email"; then
+    default_acme_email=""
+  fi
+  if ! [[ "$default_api_port" =~ ^[0-9]+$ ]]; then
+    default_api_port="8080"
+  fi
+  if ! [[ "$default_pg_port" =~ ^[0-9]+$ ]]; then
+    default_pg_port="5432"
+  fi
+  case "$default_pg_mode" in
+    native|existing|docker)
+      ;;
+    file)
+      [[ "$ALLOW_FILE_STORAGE" == "1" ]] || default_pg_mode="native"
+      ;;
+    *)
+      default_pg_mode="native"
+      ;;
+  esac
+
+  printf '\n'
+  log "Guided host-native installation"
+  log "Public HTTPS stays fixed on 443 and the ACME helper stays fixed on 80. Internal listener collisions are shifted by +${PORT_INCREMENT}."
+  require_enforced_port 80 "Public HTTP helper"
+  require_enforced_port 443 "Public HTTPS"
+
+  prompt_required "Public FQDN for https://<fqdn>/" "$default_fqdn" INSTALLER_PUBLIC_FQDN
+  prompt_required "ACME operator email" "$default_acme_email" INSTALLER_ACME_EMAIL
+  prompt_required "Bootstrap admin username" "$default_admin_username" INSTALLER_ADMIN_USERNAME
+  prompt_secret_optional "Bootstrap admin password" INSTALLER_ADMIN_PASSWORD
+
+  INSTALLER_API_PORT="$(resolve_shifted_port "$default_api_port" "ForgeFrame internal API")"
+  log "Internal API port resolved to $INSTALLER_API_PORT"
+
+  prompt_postgres_mode "$default_pg_mode"
+  prompt_required "PostgreSQL database name" "$default_pg_db" INSTALLER_PG_DB
+  prompt_required "PostgreSQL database user" "$default_pg_user" INSTALLER_PG_USER
+  prompt_secret_optional "PostgreSQL database password" INSTALLER_PG_PASSWORD
+
+  if [[ "$INSTALLER_PG_MODE" == "native" ]]; then
+    prompt_required "Native PostgreSQL cluster name" "$default_pg_cluster" INSTALLER_PG_CLUSTER_NAME
+    INSTALLER_PG_PORT="$(resolve_shifted_port "$default_pg_port" "Native PostgreSQL cluster")"
+    INSTALLER_PG_HOST="127.0.0.1"
+    INSTALLER_PG_CONTAINER_NAME=""
+    log "Native PostgreSQL port resolved to $INSTALLER_PG_PORT"
+  elif [[ "$INSTALLER_PG_MODE" == "docker" ]]; then
+    prompt_required "Managed PostgreSQL container name" "$default_pg_container" INSTALLER_PG_CONTAINER_NAME
+    INSTALLER_PG_PORT="$(resolve_shifted_port "$default_pg_port" "Managed PostgreSQL")"
+    INSTALLER_PG_HOST="127.0.0.1"
+    INSTALLER_PG_CLUSTER_NAME=""
+    log "Managed PostgreSQL host port resolved to $INSTALLER_PG_PORT"
+  elif [[ "$INSTALLER_PG_MODE" == "file" ]]; then
+    INSTALLER_PG_HOST=""
+    INSTALLER_PG_PORT=""
+    INSTALLER_PG_CONTAINER_NAME=""
+    INSTALLER_PG_CLUSTER_NAME=""
+    log "Using explicit limited-exception file/SQLite storage; PostgreSQL provisioning is skipped."
+  else
+    prompt_required "Existing PostgreSQL host" "$default_pg_host" INSTALLER_PG_HOST
+    prompt_required "Existing PostgreSQL TCP port" "$default_pg_port" INSTALLER_PG_PORT
+    require_valid_port "$INSTALLER_PG_PORT" "Existing PostgreSQL TCP port"
+    INSTALLER_PG_CONTAINER_NAME=""
+    INSTALLER_PG_CLUSTER_NAME=""
+  fi
+
+  prompt_yes_no "Preconfigure a local Ollama/OpenAI-compatible endpoint now?" "n" configure_ollama
+  if [[ "$configure_ollama" == "1" ]]; then
+    ollama_scheme="http"
+    ollama_host="127.0.0.1"
+    ollama_port="11434"
+    ollama_path="/v1"
+    prompt_required "Ollama endpoint scheme" "$ollama_scheme" ollama_scheme
+    prompt_required "Ollama endpoint host" "$ollama_host" ollama_host
+    prompt_required "Ollama endpoint port" "$ollama_port" ollama_port
+    require_valid_port "$ollama_port" "Ollama endpoint port"
+    prompt_required "Ollama endpoint path" "$ollama_path" ollama_path
+    INSTALLER_OLLAMA_BASE_URL="${ollama_scheme}://${ollama_host}:${ollama_port}${ollama_path}"
+  else
+    INSTALLER_OLLAMA_BASE_URL=""
+  fi
+}
+
+collect_default_install_inputs() {
+  local default_fqdn="$(normalize_installer_value "${FORGEFRAME_PUBLIC_FQDN:-}")"
+  local default_acme_email="$(normalize_installer_value "${FORGEFRAME_PUBLIC_TLS_ACME_EMAIL:-}")"
+  local default_admin_username="$(normalize_installer_value "${FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME:-admin}")"
+  local default_admin_password="$(normalize_installer_value "${FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD:-}")"
+  local default_ollama_url="$(normalize_installer_value "${FORGEFRAME_OLLAMA_BASE_URL:-}")"
+  local default_api_port="$(normalize_installer_value "${FORGEFRAME_PORT:-8080}")"
+  local default_pg_mode="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_MODE:-${FORGEFRAME_PG_MODE:-native}}")"
+  local default_pg_host="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_HOST:-${FORGEFRAME_PG_HOST:-127.0.0.1}}")"
+  local default_pg_port="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_PORT:-${FORGEFRAME_PG_PORT:-5432}}")"
+  local default_pg_db="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_DB:-${FORGEFRAME_PG_DB:-forgeframe}}")"
+  local default_pg_user="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_USER:-${FORGEFRAME_PG_USER:-forgeframe}}")"
+  local default_pg_container="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_CONTAINER_NAME:-${FORGEFRAME_PG_CONTAINER_NAME:-forgeframe-postgres}}")"
+  local default_pg_cluster="$(normalize_installer_value "${FORGEFRAME_INSTALL_PG_CLUSTER_NAME:-${FORGEFRAME_PG_CLUSTER_NAME:-forgeframe}}")"
+
+  require_enforced_port 80 "Public HTTP helper"
+  require_enforced_port 443 "Public HTTPS"
+
+  if ! [[ "$default_api_port" =~ ^[0-9]+$ ]]; then
+    default_api_port="8080"
+  fi
+  if ! [[ "$default_pg_port" =~ ^[0-9]+$ ]]; then
+    default_pg_port="5432"
+  fi
+  case "$default_pg_mode" in
+    native|existing|docker)
+      ;;
+    file)
+      [[ "$ALLOW_FILE_STORAGE" == "1" ]] || default_pg_mode="native"
+      ;;
+    *)
+      default_pg_mode="native"
+      ;;
+  esac
+
+  INSTALLER_PUBLIC_FQDN="$default_fqdn"
+  INSTALLER_ACME_EMAIL="$default_acme_email"
+  INSTALLER_ADMIN_USERNAME="$default_admin_username"
+  INSTALLER_ADMIN_PASSWORD="$default_admin_password"
+  INSTALLER_OLLAMA_BASE_URL="$default_ollama_url"
+  INSTALLER_API_PORT="$(resolve_shifted_port "$default_api_port" "ForgeFrame internal API")"
+  INSTALLER_PG_MODE="$default_pg_mode"
+  INSTALLER_PG_HOST="$default_pg_host"
+  INSTALLER_PG_DB="$default_pg_db"
+  INSTALLER_PG_USER="$default_pg_user"
+  INSTALLER_PG_CONTAINER_NAME="$default_pg_container"
+  INSTALLER_PG_CLUSTER_NAME="$default_pg_cluster"
+
+  case "$INSTALLER_PG_MODE" in
+    native)
+      INSTALLER_PG_HOST="127.0.0.1"
+      INSTALLER_PG_PORT="$(resolve_shifted_port "$default_pg_port" "Native PostgreSQL cluster")"
+      ;;
+    docker)
+      INSTALLER_PG_HOST="127.0.0.1"
+      INSTALLER_PG_PORT="$(resolve_shifted_port "$default_pg_port" "Managed PostgreSQL")"
+      ;;
+    existing)
+      require_valid_port "$default_pg_port" "Existing PostgreSQL TCP port"
+      INSTALLER_PG_PORT="$default_pg_port"
+      ;;
+    file)
+      [[ "$ALLOW_FILE_STORAGE" == "1" ]] || fail "PostgreSQL mode 'file' requires --allow-file-storage."
+      INSTALLER_PG_HOST=""
+      INSTALLER_PG_PORT=""
+      INSTALLER_PG_CONTAINER_NAME=""
+      INSTALLER_PG_CLUSTER_NAME=""
+      ;;
+    *)
+      fail "Unsupported PostgreSQL mode '$INSTALLER_PG_MODE'."
+      ;;
+  esac
+}
+
+reconcile_install_ports_after_dependencies() {
+  local existing_line
+  local existing_port
+  local existing_status
+  local resolved_pg_port
+
+  INSTALLER_API_PORT="$(resolve_shifted_port "$INSTALLER_API_PORT" "ForgeFrame internal API")"
+
+  case "$INSTALLER_PG_MODE" in
+    native)
+      if forgeframe_command_exists pg_lsclusters; then
+        existing_line="$(pg_lsclusters --no-header 2>"$FORGEFRAME_NULL_DEVICE" | awk -v name="$INSTALLER_PG_CLUSTER_NAME" '$2 == name {print; exit}')"
+        if [[ -n "$existing_line" ]]; then
+          existing_port="$(awk '{print $3}' <<<"$existing_line")"
+          existing_status="$(awk '{print $4}' <<<"$existing_line")"
+          if [[ "$existing_status" == "down" ]] && port_is_occupied "$existing_port"; then
+            resolved_pg_port="$(resolve_shifted_port "$existing_port" "Native PostgreSQL cluster")"
+            log "Native PostgreSQL cluster '$INSTALLER_PG_CLUSTER_NAME' is down on occupied port $existing_port; re-resolved to $resolved_pg_port."
+            INSTALLER_PG_PORT="$resolved_pg_port"
+          else
+            if [[ "$existing_port" != "$INSTALLER_PG_PORT" ]]; then
+              log "Reusing existing native PostgreSQL cluster '$INSTALLER_PG_CLUSTER_NAME' on port $existing_port."
+            fi
+            INSTALLER_PG_PORT="$existing_port"
+          fi
+          return 0
+        fi
+      fi
+      resolved_pg_port="$(resolve_shifted_port "$INSTALLER_PG_PORT" "Native PostgreSQL cluster")"
+      if [[ "$resolved_pg_port" != "$INSTALLER_PG_PORT" ]]; then
+        log "Native PostgreSQL port re-resolved to $resolved_pg_port after host dependency installation."
+        INSTALLER_PG_PORT="$resolved_pg_port"
+      fi
+      ;;
+    docker)
+      resolved_pg_port="$(resolve_shifted_port "$INSTALLER_PG_PORT" "Managed PostgreSQL")"
+      if [[ "$resolved_pg_port" != "$INSTALLER_PG_PORT" ]]; then
+        log "Managed PostgreSQL host port re-resolved to $resolved_pg_port after host dependency installation."
+        INSTALLER_PG_PORT="$resolved_pg_port"
+      fi
+      ;;
+  esac
+}
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --guided)
+      GUIDED=1
+      shift
+      ;;
+    --install-root)
+      INSTALL_ROOT="$2"
+      shift 2
+      ;;
+    --config-dir)
+      CONFIG_DIR="$2"
+      shift 2
+      ;;
+    --state-dir)
+      STATE_DIR="$2"
+      shift 2
+      ;;
+    --log-dir)
+      LOG_DIR="$2"
+      shift 2
+      ;;
+    --unit-dir)
+      UNIT_DIR="$2"
+      shift 2
+      ;;
+    --env-file)
+      ENV_FILE="$2"
+      ENV_FILE_EXPLICIT=1
+      shift 2
+      ;;
+    --system-user)
+      SYSTEM_USER="$2"
+      shift 2
+      ;;
+    --system-group)
+      SYSTEM_GROUP="$2"
+      shift 2
+      ;;
+    --skip-system-deps)
+      SKIP_SYSTEM_DEPS=1
+      shift
+      ;;
+    --skip-system-user)
+      SKIP_SYSTEM_USER=1
+      shift
+      ;;
+    --skip-python-env)
+      SKIP_PYTHON_ENV=1
+      shift
+      ;;
+    --skip-frontend-build)
+      SKIP_FRONTEND_BUILD=1
+      shift
+      ;;
+    --skip-systemctl)
+      SKIP_SYSTEMCTL=1
+      shift
+      ;;
+    --allow-file-storage)
+      ALLOW_FILE_STORAGE=1
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "Unknown option: $1"
+      ;;
+  esac
+done
+
+[[ "$(uname -s)" == "Linux" ]] || fail "Host-native installation is only supported on Linux."
+if [[ -f /etc/os-release ]]; then
+  # shellcheck disable=SC1091
+  source /etc/os-release
+  case "${ID:-}" in
+    ubuntu|debian)
+      ;;
+    *)
+      fail "Automatic host preparation currently supports Ubuntu or Debian only."
+      ;;
+  esac
+else
+  fail "Unable to determine Linux distribution from /etc/os-release."
+fi
+
+ensure_bootstrap_python
+
+INSTALL_ROOT="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$INSTALL_ROOT")"
+CONFIG_DIR="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$CONFIG_DIR")"
+STATE_DIR="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$STATE_DIR")"
+LOG_DIR="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$LOG_DIR")"
+UNIT_DIR="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$UNIT_DIR")"
+if [[ "$ENV_FILE_EXPLICIT" != "1" ]]; then
+  ENV_FILE="$CONFIG_DIR/forgeframe.env"
+fi
+ENV_FILE="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$ENV_FILE")"
+
+if [[ "$DRY_RUN" == "1" ]]; then
+  log "dry_run guided=$GUIDED install_root=$INSTALL_ROOT config_dir=$CONFIG_DIR state_dir=$STATE_DIR log_dir=$LOG_DIR unit_dir=$UNIT_DIR env_file=$ENV_FILE user=$SYSTEM_USER group=$SYSTEM_GROUP allow_file_storage=$ALLOW_FILE_STORAGE"
+  exit 0
+fi
+
+mkdir -p "$CONFIG_DIR" "$STATE_DIR" "$LOG_DIR" "$UNIT_DIR"
+mkdir -p "$INSTALL_ROOT/backend/.forgeframe"
+mkdir -p "$STATE_DIR/acme-webroot" "$STATE_DIR/tls" "$CONFIG_DIR/tls/live"
+require_runtime_install_tree
+
+if [[ "$SKIP_SYSTEM_USER" == "1" ]]; then
+  SYSTEM_USER="$(id -un)"
+  SYSTEM_GROUP="$(id -gn)"
+  log "Skipping dedicated system user creation; using current user/group $SYSTEM_USER:$SYSTEM_GROUP."
+elif [[ "$(id -u)" -eq 0 ]]; then
+  if ! getent group "$SYSTEM_GROUP" >"$FORGEFRAME_NULL_DEVICE" 2>&1; then
+    groupadd --system "$SYSTEM_GROUP"
+    log "Created system group $SYSTEM_GROUP"
+  fi
+  if ! id -u "$SYSTEM_USER" >"$FORGEFRAME_NULL_DEVICE" 2>&1; then
+    useradd --system --gid "$SYSTEM_GROUP" --home-dir "$STATE_DIR" --shell /usr/sbin/nologin "$SYSTEM_USER"
+    log "Created system user $SYSTEM_USER"
+  fi
+  chown -R "$SYSTEM_USER:$SYSTEM_GROUP" "$STATE_DIR" "$LOG_DIR" "$INSTALL_ROOT/backend/.forgeframe"
+else
+  log "Running without root; using existing user/group ownership and skipping system user creation."
+  SYSTEM_USER="$(id -un)"
+  SYSTEM_GROUP="$(id -gn)"
+fi
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  install_host_env_template "$ENV_FILE"
+fi
+
+forgeframe_load_env_file "$ENV_FILE" >"$FORGEFRAME_NULL_DEVICE" 2>&1 || true
+if [[ "$GUIDED" == "1" && "$NON_INTERACTIVE" != "1" ]]; then
+  guided_collect_inputs
+else
+  collect_default_install_inputs
+fi
+if [[ "$INSTALLER_PG_MODE" == "file" && "$ALLOW_FILE_STORAGE" == "1" ]]; then
+  SKIP_PYTHON_ENV=1
+  SKIP_FRONTEND_BUILD=1
+  log "Limited file/SQLite storage selected; skipping Python dependency install and frontend build for the stdlib bootstrap runtime."
+fi
+ensure_system_dependencies
+reconcile_install_ports_after_dependencies
+
+export FORGEFRAME_INSTALL_GUIDED="$GUIDED"
+export FORGEFRAME_INSTALL_PUBLIC_FQDN="$INSTALLER_PUBLIC_FQDN"
+export FORGEFRAME_INSTALL_ACME_EMAIL="$INSTALLER_ACME_EMAIL"
+export FORGEFRAME_INSTALL_ADMIN_USERNAME="$INSTALLER_ADMIN_USERNAME"
+export FORGEFRAME_INSTALL_ADMIN_PASSWORD="$INSTALLER_ADMIN_PASSWORD"
+export FORGEFRAME_INSTALL_API_PORT="$INSTALLER_API_PORT"
+export FORGEFRAME_INSTALL_PG_MODE="$INSTALLER_PG_MODE"
+export FORGEFRAME_INSTALL_PG_HOST="$INSTALLER_PG_HOST"
+export FORGEFRAME_INSTALL_PG_PORT="$INSTALLER_PG_PORT"
+export FORGEFRAME_INSTALL_PG_DB="$INSTALLER_PG_DB"
+export FORGEFRAME_INSTALL_PG_USER="$INSTALLER_PG_USER"
+export FORGEFRAME_INSTALL_PG_PASSWORD="$INSTALLER_PG_PASSWORD"
+export FORGEFRAME_INSTALL_PG_CONTAINER_NAME="$INSTALLER_PG_CONTAINER_NAME"
+export FORGEFRAME_INSTALL_PG_CLUSTER_NAME="$INSTALLER_PG_CLUSTER_NAME"
+export FORGEFRAME_INSTALL_OLLAMA_BASE_URL="$INSTALLER_OLLAMA_BASE_URL"
+export FORGEFRAME_INSTALL_PYTHON_BIN="$SELECTED_PYTHON_BIN"
+if [[ "$SKIP_PYTHON_ENV" != "1" ]]; then
+  export FORGEFRAME_INSTALL_RUNTIME_PYTHON_BIN="$INSTALL_ROOT/.venv/bin/python"
+else
+  export FORGEFRAME_INSTALL_RUNTIME_PYTHON_BIN="$SELECTED_PYTHON_BIN"
+fi
+export FORGEFRAME_INSTALL_ALLOW_FILE_STORAGE="$ALLOW_FILE_STORAGE"
+
+python3 - "$ENV_FILE" "$INSTALL_ROOT" "$CONFIG_DIR" "$STATE_DIR" <<'PY'
+import os
+import secrets
+import shlex
+import sys
+from pathlib import Path
+from urllib.parse import quote, unquote, urlsplit
+
+env_path = Path(sys.argv[1])
+install_root = sys.argv[2]
+config_dir = sys.argv[3]
+state_dir = sys.argv[4]
+guided = os.environ.get("FORGEFRAME_INSTALL_GUIDED") == "1"
+
+lines = env_path.read_text(encoding="utf-8").splitlines()
+entries: dict[str, str] = {}
+positions: dict[str, int] = {}
+for index, line in enumerate(lines):
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or "=" not in line:
+        continue
+    key, _, raw_value = line.partition("=")
+    normalized_key = key.strip()
+    entries[normalized_key] = raw_value.strip().strip("'").strip('"')
+    positions[normalized_key] = index
+
+
+def render(value: str) -> str:
+    return shlex.quote(value)
+
+
+def set_or_add(key: str, value: str) -> None:
+    rendered = f"{key}={render(value)}"
+    if key in positions:
+        lines[positions[key]] = rendered
+    else:
+        positions[key] = len(lines)
+        lines.append(rendered)
+    entries[key] = value
+
+
+def generate_token(prefix: str) -> str:
+    return f"{prefix}{secrets.token_urlsafe(18)}"
+
+
+def secure_bootstrap_password(existing: str, requested: str) -> str:
+    normalized_existing = existing.strip().lower()
+    if requested.strip():
+        return requested.strip()
+    if normalized_existing not in {
+        "",
+        "replace-with-a-generated-bootstrap-password",
+        "forgeframe-admin",
+        "forgegate-admin",
+    }:
+        return existing.strip()
+    return generate_token("fg-admin-")
+
+
+def secure_pg_password(existing: str, requested: str) -> str:
+    normalized_existing = existing.strip().lower()
+    if requested.strip():
+        return requested.strip()
+    if normalized_existing not in {
+        "",
+        "replace-with-a-generated-postgres-password",
+        "forgeframe",
+        "forgegate",
+    }:
+        return existing.strip()
+    return generate_token("fg-pg-")
+
+
+def normalize_host_value(host: str) -> str:
+    normalized = host.strip()
+    if normalized.startswith("[") and normalized.endswith("]"):
+        return normalized[1:-1]
+    if normalized.startswith("["):
+        return normalized[1:]
+    if normalized.endswith("]"):
+        return normalized[:-1]
+    return normalized
+
+
+def host_for_url(host: str) -> str:
+    normalized = normalize_host_value(host)
+    if ":" in normalized:
+        return f"[{normalized}]"
+    return normalized
+
+
+def repair_unbracketed_ipv6_netloc(value: str) -> str:
+    prefix, separator, rest = value.partition("://")
+    if not separator:
+        return value
+
+    netloc_end = len(rest)
+    for delimiter in ("/", "?", "#"):
+        delimiter_index = rest.find(delimiter)
+        if delimiter_index != -1:
+            netloc_end = min(netloc_end, delimiter_index)
+
+    netloc = rest[:netloc_end]
+    suffix = rest[netloc_end:]
+    if "[" in netloc or "]" in netloc:
+        return value
+
+    userinfo, at, hostport = netloc.rpartition("@")
+    if hostport.count(":") < 2:
+        return value
+
+    host, port_separator, port_candidate = hostport.rpartition(":")
+    port = ""
+    if port_separator and port_candidate.isdigit():
+        port = f":{port_candidate}"
+    else:
+        host = hostport
+
+    if not host:
+        return value
+
+    repaired_netloc = f"[{host}]{port}"
+    if at:
+        repaired_netloc = f"{userinfo}@{repaired_netloc}"
+    return f"{prefix}://{repaired_netloc}{suffix}"
+
+
+def split_postgres_url(value: str):
+    candidates = [repair_unbracketed_ipv6_netloc(value)]
+    if candidates[0] != value:
+        candidates.append(value)
+
+    for candidate in candidates:
+        try:
+            parts = urlsplit(candidate)
+            _ = parts.port
+        except ValueError:
+            continue
+        return parts, candidate
+    return None, ""
+
+
+def build_postgres_url(user: str, password: str, host: str, port: str, database: str) -> str:
+    return "postgresql+psycopg://{user}:{password}@{host}:{port}/{database}".format(
+        user=quote(user, safe=""),
+        password=quote(password, safe=""),
+        host=host_for_url(host),
+        port=port,
+        database=quote(database, safe=""),
+    )
+
+
+def configure_limited_file_storage() -> None:
+    set_or_add("FORGEFRAME_LIMITED_STDLIB_RUNTIME", "1")
+    set_or_add("FORGEFRAME_HARNESS_STORAGE_BACKEND", "file")
+    set_or_add("FORGEFRAME_CONTROL_PLANE_STORAGE_BACKEND", "file")
+    set_or_add("FORGEFRAME_OBSERVABILITY_STORAGE_BACKEND", "file")
+    set_or_add("FORGEFRAME_GOVERNANCE_STORAGE_BACKEND", "file")
+    set_or_add("FORGEFRAME_INSTANCES_STORAGE_BACKEND", "file")
+    set_or_add("FORGEFRAME_HARNESS_PROFILES_PATH", f"{state_dir}/harness_profiles.json")
+    set_or_add("FORGEFRAME_HARNESS_RUNS_PATH", f"{state_dir}/harness_runs.json")
+    set_or_add("FORGEFRAME_CONTROL_PLANE_STATE_PATH", f"{state_dir}/control_plane_state.json")
+    set_or_add("FORGEFRAME_INSTANCES_STATE_PATH", f"{state_dir}/instances_state.json")
+    set_or_add("FORGEFRAME_GOVERNANCE_STATE_PATH", f"{state_dir}/governance_state.json")
+    set_or_add("FORGEFRAME_OBSERVABILITY_EVENTS_PATH", f"{state_dir}/observability_events.jsonl")
+    set_or_add("FORGEFRAME_OAUTH_OPERATIONS_PATH", f"{state_dir}/oauth_operations.jsonl")
+    set_or_add("FORGEFRAME_EXECUTION_POSTGRES_URL", "")
+    set_or_add("FORGEFRAME_EXECUTION_SQLITE_PATH", f"{state_dir}/execution.sqlite")
+
+
+def configure_postgres_storage(base_url: str) -> None:
+    if pg_mode == "file":
+        configure_limited_file_storage()
+        return
+
+    set_or_add("FORGEFRAME_HARNESS_STORAGE_BACKEND", "postgresql")
+    set_or_add("FORGEFRAME_CONTROL_PLANE_STORAGE_BACKEND", "postgresql")
+    set_or_add("FORGEFRAME_OBSERVABILITY_STORAGE_BACKEND", "postgresql")
+    set_or_add("FORGEFRAME_GOVERNANCE_STORAGE_BACKEND", "postgresql")
+    set_or_add("FORGEFRAME_INSTANCES_STORAGE_BACKEND", "postgresql")
+    set_or_add("FORGEFRAME_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_HARNESS_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_CONTROL_PLANE_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_OBSERVABILITY_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_GOVERNANCE_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_INSTANCES_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_EXECUTION_POSTGRES_URL", base_url)
+
+
+existing_pg_url = entries.get("FORGEFRAME_POSTGRES_URL", "")
+bootstrap_password = secure_bootstrap_password(
+    entries.get("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", ""),
+    os.environ.get("FORGEFRAME_INSTALL_ADMIN_PASSWORD", ""),
+)
+bootstrap_username = (os.environ.get("FORGEFRAME_INSTALL_ADMIN_USERNAME", "").strip() or entries.get("FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME", "").strip() or "admin")
+selected_python_bin = (
+    os.environ.get("FORGEFRAME_INSTALL_RUNTIME_PYTHON_BIN", "").strip()
+    or os.environ.get("FORGEFRAME_INSTALL_PYTHON_BIN", "").strip()
+    or entries.get("FORGEFRAME_PYTHON_BIN", "").strip()
+)
+
+if guided:
+    pg_mode = os.environ.get("FORGEFRAME_INSTALL_PG_MODE", "").strip() or entries.get("FORGEFRAME_PG_MODE", "").strip() or "native"
+    pg_host = os.environ.get("FORGEFRAME_INSTALL_PG_HOST", "").strip() or entries.get("FORGEFRAME_PG_HOST", "").strip() or "127.0.0.1"
+    pg_port = os.environ.get("FORGEFRAME_INSTALL_PG_PORT", "").strip() or entries.get("FORGEFRAME_PG_PORT", "").strip() or "5432"
+    pg_db = os.environ.get("FORGEFRAME_INSTALL_PG_DB", "").strip() or entries.get("FORGEFRAME_PG_DB", "").strip() or "forgeframe"
+    pg_user = os.environ.get("FORGEFRAME_INSTALL_PG_USER", "").strip() or entries.get("FORGEFRAME_PG_USER", "").strip() or "forgeframe"
+    pg_password = secure_pg_password(entries.get("FORGEFRAME_PG_PASSWORD", ""), os.environ.get("FORGEFRAME_INSTALL_PG_PASSWORD", ""))
+    pg_host = normalize_host_value(pg_host)
+    base_url = build_postgres_url(pg_user, pg_password, pg_host, pg_port, pg_db)
+    set_or_add("FORGEFRAME_PG_MODE", pg_mode)
+    set_or_add("FORGEFRAME_PG_HOST", pg_host)
+    set_or_add("FORGEFRAME_PG_PORT", pg_port)
+    set_or_add("FORGEFRAME_PG_DB", pg_db)
+    set_or_add("FORGEFRAME_PG_USER", pg_user)
+    set_or_add("FORGEFRAME_PG_PASSWORD", pg_password)
+    set_or_add("FORGEFRAME_PG_CONTAINER_NAME", os.environ.get("FORGEFRAME_INSTALL_PG_CONTAINER_NAME", "").strip())
+    set_or_add("FORGEFRAME_PG_CLUSTER_NAME", os.environ.get("FORGEFRAME_INSTALL_PG_CLUSTER_NAME", "").strip())
+    set_or_add("FORGEFRAME_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_HARNESS_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_CONTROL_PLANE_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_OBSERVABILITY_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_GOVERNANCE_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_INSTANCES_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_EXECUTION_POSTGRES_URL", base_url)
+    set_or_add("FORGEFRAME_HOST", "127.0.0.1")
+    set_or_add("FORGEFRAME_PORT", os.environ.get("FORGEFRAME_INSTALL_API_PORT", "").strip() or entries.get("FORGEFRAME_PORT", "8080") or "8080")
+    set_or_add("FORGEFRAME_FRONTEND_DIST_PATH", f"{install_root}/frontend/dist")
+    set_or_add("FORGEFRAME_PUBLIC_FQDN", os.environ.get("FORGEFRAME_INSTALL_PUBLIC_FQDN", "").strip())
+    set_or_add("FORGEFRAME_PUBLIC_HTTPS_HOST", "0.0.0.0")
+    set_or_add("FORGEFRAME_PUBLIC_HTTPS_PORT", "443")
+    set_or_add("FORGEFRAME_PUBLIC_HTTP_HELPER_HOST", "0.0.0.0")
+    set_or_add("FORGEFRAME_PUBLIC_HTTP_HELPER_PORT", "80")
+    set_or_add("FORGEFRAME_PUBLIC_ADMIN_BASE", entries.get("FORGEFRAME_PUBLIC_ADMIN_BASE", "/admin") or "/admin")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_MODE", "integrated_acme")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_CERT_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_CERT_PATH", f"{config_dir}/tls/live/fullchain.pem") or f"{config_dir}/tls/live/fullchain.pem")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_KEY_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_KEY_PATH", f"{config_dir}/tls/live/privkey.pem") or f"{config_dir}/tls/live/privkey.pem")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH", f"{state_dir}/acme-webroot") or f"{state_dir}/acme-webroot")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_STATE_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_STATE_PATH", f"{state_dir}/tls") or f"{state_dir}/tls")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_LAST_ERROR_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_LAST_ERROR_PATH", f"{state_dir}/tls/last_error.txt") or f"{state_dir}/tls/last_error.txt")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_RENEWAL_WINDOW_DAYS", entries.get("FORGEFRAME_PUBLIC_TLS_RENEWAL_WINDOW_DAYS", "30") or "30")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_ACME_EMAIL", os.environ.get("FORGEFRAME_INSTALL_ACME_EMAIL", "").strip())
+    set_or_add("FORGEFRAME_PUBLIC_TLS_ACME_DIRECTORY_URL", entries.get("FORGEFRAME_PUBLIC_TLS_ACME_DIRECTORY_URL", "https://acme-v02.api.letsencrypt.org/directory") or "https://acme-v02.api.letsencrypt.org/directory")
+    set_or_add("FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME", bootstrap_username)
+    set_or_add("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", bootstrap_password)
+    set_or_add("FORGEFRAME_OLLAMA_BASE_URL", os.environ.get("FORGEFRAME_INSTALL_OLLAMA_BASE_URL", "").strip())
+else:
+    pg_mode = os.environ.get("FORGEFRAME_INSTALL_PG_MODE", "").strip() or entries.get("FORGEFRAME_PG_MODE", "").strip() or "native"
+    pg_host = os.environ.get("FORGEFRAME_INSTALL_PG_HOST", "").strip() or entries.get("FORGEFRAME_PG_HOST", "").strip() or "127.0.0.1"
+    pg_port = os.environ.get("FORGEFRAME_INSTALL_PG_PORT", "").strip() or entries.get("FORGEFRAME_PG_PORT", "").strip() or "5432"
+    pg_db = os.environ.get("FORGEFRAME_INSTALL_PG_DB", "").strip() or entries.get("FORGEFRAME_PG_DB", "").strip() or "forgeframe"
+    pg_user = os.environ.get("FORGEFRAME_INSTALL_PG_USER", "").strip() or entries.get("FORGEFRAME_PG_USER", "").strip() or "forgeframe"
+    existing_pg_password = entries.get("FORGEFRAME_PG_PASSWORD", "")
+    if existing_pg_url:
+        parts, existing_pg_url = split_postgres_url(existing_pg_url)
+        if parts:
+            pg_host = os.environ.get("FORGEFRAME_INSTALL_PG_HOST", "").strip() or entries.get("FORGEFRAME_PG_HOST", "").strip() or parts.hostname or pg_host
+            pg_port = os.environ.get("FORGEFRAME_INSTALL_PG_PORT", "").strip() or entries.get("FORGEFRAME_PG_PORT", "").strip() or (str(parts.port) if parts.port else pg_port)
+            pg_db = os.environ.get("FORGEFRAME_INSTALL_PG_DB", "").strip() or entries.get("FORGEFRAME_PG_DB", "").strip() or (unquote(parts.path.lstrip("/")) if parts.path else pg_db)
+            pg_user = os.environ.get("FORGEFRAME_INSTALL_PG_USER", "").strip() or entries.get("FORGEFRAME_PG_USER", "").strip() or (unquote(parts.username) if parts.username else pg_user)
+            existing_pg_password = existing_pg_password or (unquote(parts.password) if parts.password else "")
+    pg_password = secure_pg_password(existing_pg_password, os.environ.get("FORGEFRAME_INSTALL_PG_PASSWORD", ""))
+    pg_host = normalize_host_value(pg_host)
+    if pg_mode in {"native", "docker"} or "replace-with-a-generated-postgres-password" in existing_pg_url or "replace-with-postgresql-url" in existing_pg_url or not existing_pg_url:
+        base_url = build_postgres_url(pg_user, pg_password, pg_host, pg_port, pg_db)
+    else:
+        base_url = existing_pg_url
+
+    set_or_add("FORGEFRAME_HOST", entries.get("FORGEFRAME_HOST", "127.0.0.1") or "127.0.0.1")
+    set_or_add("FORGEFRAME_PORT", os.environ.get("FORGEFRAME_INSTALL_API_PORT", "").strip() or entries.get("FORGEFRAME_PORT", "8080") or "8080")
+    set_or_add("FORGEFRAME_FRONTEND_DIST_PATH", f"{install_root}/frontend/dist")
+    set_or_add("FORGEFRAME_PG_MODE", pg_mode)
+    set_or_add("FORGEFRAME_PG_HOST", pg_host)
+    set_or_add("FORGEFRAME_PG_PORT", pg_port)
+    set_or_add("FORGEFRAME_PG_DB", pg_db)
+    set_or_add("FORGEFRAME_PG_USER", pg_user)
+    set_or_add("FORGEFRAME_PG_PASSWORD", pg_password)
+    set_or_add("FORGEFRAME_PG_CONTAINER_NAME", os.environ.get("FORGEFRAME_INSTALL_PG_CONTAINER_NAME", "").strip() or entries.get("FORGEFRAME_PG_CONTAINER_NAME", "") or "")
+    set_or_add("FORGEFRAME_PG_CLUSTER_NAME", os.environ.get("FORGEFRAME_INSTALL_PG_CLUSTER_NAME", "").strip() or entries.get("FORGEFRAME_PG_CLUSTER_NAME", "forgeframe") or "forgeframe")
+    set_or_add(
+        "FORGEFRAME_PUBLIC_FQDN",
+        entries.get("FORGEFRAME_PUBLIC_FQDN", "replace-with-public-fqdn.example.invalid")
+        or "replace-with-public-fqdn.example.invalid",
+    )
+    set_or_add("FORGEFRAME_PUBLIC_HTTPS_HOST", entries.get("FORGEFRAME_PUBLIC_HTTPS_HOST", "0.0.0.0") or "0.0.0.0")
+    set_or_add("FORGEFRAME_PUBLIC_HTTPS_PORT", entries.get("FORGEFRAME_PUBLIC_HTTPS_PORT", "443") or "443")
+    set_or_add("FORGEFRAME_PUBLIC_HTTP_HELPER_HOST", entries.get("FORGEFRAME_PUBLIC_HTTP_HELPER_HOST", "0.0.0.0") or "0.0.0.0")
+    set_or_add("FORGEFRAME_PUBLIC_HTTP_HELPER_PORT", entries.get("FORGEFRAME_PUBLIC_HTTP_HELPER_PORT", "80") or "80")
+    set_or_add("FORGEFRAME_PUBLIC_ADMIN_BASE", entries.get("FORGEFRAME_PUBLIC_ADMIN_BASE", "/admin") or "/admin")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_MODE", os.environ.get("FORGEFRAME_PUBLIC_TLS_MODE", "").strip() or entries.get("FORGEFRAME_PUBLIC_TLS_MODE", "integrated_acme") or "integrated_acme")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_CERT_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_CERT_PATH", f"{config_dir}/tls/live/fullchain.pem") or f"{config_dir}/tls/live/fullchain.pem")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_KEY_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_KEY_PATH", f"{config_dir}/tls/live/privkey.pem") or f"{config_dir}/tls/live/privkey.pem")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_WEBROOT_PATH", f"{state_dir}/acme-webroot") or f"{state_dir}/acme-webroot")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_STATE_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_STATE_PATH", f"{state_dir}/tls") or f"{state_dir}/tls")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_LAST_ERROR_PATH", entries.get("FORGEFRAME_PUBLIC_TLS_LAST_ERROR_PATH", f"{state_dir}/tls/last_error.txt") or f"{state_dir}/tls/last_error.txt")
+    set_or_add("FORGEFRAME_PUBLIC_TLS_RENEWAL_WINDOW_DAYS", entries.get("FORGEFRAME_PUBLIC_TLS_RENEWAL_WINDOW_DAYS", "30") or "30")
+    set_or_add(
+        "FORGEFRAME_PUBLIC_TLS_ACME_EMAIL",
+        entries.get("FORGEFRAME_PUBLIC_TLS_ACME_EMAIL", "replace-with-acme-email@example.invalid")
+        or "replace-with-acme-email@example.invalid",
+    )
+    set_or_add("FORGEFRAME_PUBLIC_TLS_ACME_DIRECTORY_URL", entries.get("FORGEFRAME_PUBLIC_TLS_ACME_DIRECTORY_URL", "https://acme-v02.api.letsencrypt.org/directory") or "https://acme-v02.api.letsencrypt.org/directory")
+    set_or_add("FORGEFRAME_BOOTSTRAP_ADMIN_USERNAME", bootstrap_username)
+    set_or_add("FORGEFRAME_BOOTSTRAP_ADMIN_PASSWORD", bootstrap_password)
+    if pg_mode == "file":
+        configure_limited_file_storage()
+    else:
+        configure_postgres_storage(base_url)
+    set_or_add("FORGEFRAME_OLLAMA_BASE_URL", entries.get("FORGEFRAME_OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1") or "http://127.0.0.1:11434/v1")
+
+if selected_python_bin:
+    set_or_add("FORGEFRAME_PYTHON_BIN", selected_python_bin)
+set_or_add("FORGEFRAME_EXECUTION_WORKER_INSTANCE_ID", entries.get("FORGEFRAME_EXECUTION_WORKER_INSTANCE_ID", "") or "")
+set_or_add("FORGEFRAME_EXECUTION_WORKER_COMPANY_ID", entries.get("FORGEFRAME_EXECUTION_WORKER_COMPANY_ID", "") or "")
+set_or_add("FORGEFRAME_EXECUTION_WORKER_KEY", entries.get("FORGEFRAME_EXECUTION_WORKER_KEY", "forgeframe-worker") or "forgeframe-worker")
+set_or_add("FORGEFRAME_EXECUTION_WORKER_EXECUTION_LANE", entries.get("FORGEFRAME_EXECUTION_WORKER_EXECUTION_LANE", "background_agentic") or "background_agentic")
+set_or_add("FORGEFRAME_EXECUTION_WORKER_RUN_KIND", entries.get("FORGEFRAME_EXECUTION_WORKER_RUN_KIND", "responses_background") or "responses_background")
+set_or_add("FORGEFRAME_EXECUTION_WORKER_POLL_INTERVAL_SECONDS", entries.get("FORGEFRAME_EXECUTION_WORKER_POLL_INTERVAL_SECONDS", "2") or "2")
+set_or_add("FORGEFRAME_EXECUTION_WORKER_LEASE_TTL_SECONDS", entries.get("FORGEFRAME_EXECUTION_WORKER_LEASE_TTL_SECONDS", "300") or "300")
+set_or_add("FORGEFRAME_EXECUTION_WORKER_HEARTBEAT_TTL_SECONDS", entries.get("FORGEFRAME_EXECUTION_WORKER_HEARTBEAT_TTL_SECONDS", "360") or "360")
+
+env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+
+forgeframe_load_env_file "$ENV_FILE" || fail "Unable to load $ENV_FILE after writing installer values."
+write_local_env_mirrors
+write_local_env_examples
+
+INSTALLER_PG_MODE="${INSTALLER_PG_MODE:-${FORGEFRAME_PG_MODE:-native}}"
+INSTALLER_PG_HOST="${INSTALLER_PG_HOST:-${FORGEFRAME_PG_HOST:-127.0.0.1}}"
+INSTALLER_PG_PORT="${INSTALLER_PG_PORT:-${FORGEFRAME_PG_PORT:-5432}}"
+INSTALLER_PG_DB="${INSTALLER_PG_DB:-${FORGEFRAME_PG_DB:-forgeframe}}"
+INSTALLER_PG_USER="${INSTALLER_PG_USER:-${FORGEFRAME_PG_USER:-forgeframe}}"
+INSTALLER_PG_PASSWORD="${INSTALLER_PG_PASSWORD:-${FORGEFRAME_PG_PASSWORD:-}}"
+INSTALLER_PG_CONTAINER_NAME="${INSTALLER_PG_CONTAINER_NAME:-${FORGEFRAME_PG_CONTAINER_NAME:-forgeframe-postgres}}"
+INSTALLER_PG_CLUSTER_NAME="${INSTALLER_PG_CLUSTER_NAME:-${FORGEFRAME_PG_CLUSTER_NAME:-forgeframe}}"
+
+case "$INSTALLER_PG_MODE" in
+  native)
+    provision_native_postgres
+    ;;
+  docker)
+    provision_managed_postgres
+    ;;
+  existing)
+    wait_for_tcp_endpoint "$INSTALLER_PG_HOST" "$INSTALLER_PG_PORT" 15 "Configured PostgreSQL"
+    log "Verified PostgreSQL reachability on ${INSTALLER_PG_HOST}:${INSTALLER_PG_PORT}"
+    ;;
+  file)
+    [[ "$ALLOW_FILE_STORAGE" == "1" ]] || fail "PostgreSQL mode 'file' requires --allow-file-storage."
+    log "Using explicit limited-exception file/SQLite storage because PostgreSQL provisioning is unavailable."
+    ;;
+  *)
+    fail "Unsupported PostgreSQL mode '$INSTALLER_PG_MODE'."
+    ;;
+esac
+
+if [[ "$SKIP_PYTHON_ENV" != "1" ]]; then
+  if [[ ! -d "$INSTALL_ROOT/.venv" ]]; then
+    "$SELECTED_PYTHON_BIN" -m venv "$INSTALL_ROOT/.venv"
+    log "Created virtual environment at $INSTALL_ROOT/.venv"
+  fi
+  "$INSTALL_ROOT/.venv/bin/pip" install --upgrade pip >"$FORGEFRAME_NULL_DEVICE"
+  "$INSTALL_ROOT/.venv/bin/pip" install -e "$INSTALL_ROOT/backend" >"$FORGEFRAME_NULL_DEVICE"
+  log "Installed backend dependencies into $INSTALL_ROOT/.venv"
+fi
+
+if [[ "$SKIP_FRONTEND_BUILD" != "1" ]]; then
+  if [[ ! -f "$INSTALL_ROOT/frontend/dist/index.html" ]]; then
+    frontend_log="$LOG_DIR/frontend-build.log"
+    mkdir -p "$LOG_DIR"
+    : >"$frontend_log"
+    forgeframe_command_exists npm || fail "npm is required to build the frontend dist."
+    if [[ -f "$INSTALL_ROOT/frontend/package-lock.json" || -f "$INSTALL_ROOT/frontend/npm-shrinkwrap.json" ]]; then
+      log "Installing frontend dependencies with npm ci (log: $frontend_log)"
+      if ! (cd "$INSTALL_ROOT/frontend" && npm ci) >>"$frontend_log" 2>&1; then
+        tail -80 "$frontend_log" >&2 || true
+        fail "Frontend dependency installation failed with npm ci. Full log: $frontend_log"
+      fi
+    else
+      log "Installing frontend dependencies with npm install (log: $frontend_log)"
+      if ! (cd "$INSTALL_ROOT/frontend" && npm install) >>"$frontend_log" 2>&1; then
+        tail -80 "$frontend_log" >&2 || true
+        fail "Frontend dependency installation failed with npm install. Full log: $frontend_log"
+      fi
+    fi
+    log "Building frontend dist (log: $frontend_log)"
+    if ! (cd "$INSTALL_ROOT/frontend" && npm run build) >>"$frontend_log" 2>&1; then
+      tail -80 "$frontend_log" >&2 || true
+      fail "Frontend build failed. Full log: $frontend_log"
+    fi
+    log "Built frontend dist into $INSTALL_ROOT/frontend/dist"
+  else
+    log "Using existing frontend dist at $INSTALL_ROOT/frontend/dist"
+  fi
+fi
+
+install_systemd_units
+
+if [[ "$SKIP_SYSTEMCTL" != "1" ]]; then
+  forgeframe_command_exists systemctl || fail "systemctl is required for the normative host-native install path."
+  systemctl daemon-reload
+  log "Ran systemctl daemon-reload"
+fi
+
+start_guided_runtime_services
+
+if [[ "$GUIDED" == "1" ]]; then
+  log "Guided host-native installation artifacts are ready."
+  log "Resolved ports: public HTTPS 443, ACME helper 80, internal API ${FORGEFRAME_PORT:-8080}, PostgreSQL ${FORGEFRAME_PG_HOST:-127.0.0.1}:${FORGEFRAME_PG_PORT:-5432}"
+  log "forgeframe.env written to $ENV_FILE"
+  log "Ignored .env mirrors written to $INSTALL_ROOT/.env.host, $INSTALL_ROOT/.env, and $INSTALL_ROOT/backend/.env"
+  log "Local .env.example files written to $INSTALL_ROOT/.env.host.example, $INSTALL_ROOT/.env.example, and $INSTALL_ROOT/backend/.env.example"
+  if [[ "$SKIP_SYSTEMCTL" == "1" ]]; then
+    log "Services were installed but not started because --skip-systemctl was provided."
+  else
+    log "Services were enabled and started; certificate request and host smoke validation completed."
+  fi
+else
+  log "Host-native installation artifacts are ready."
+fi
+if [[ "$GUIDED" != "1" || "$SKIP_SYSTEMCTL" == "1" ]]; then
+  log "Manual internal runtime path: systemctl enable --now forgeframe-api.service forgeframe-worker.service forgeframe-retention.timer"
+  log "Manual public runtime path: enable forgeframe-http-helper.service, run deploy/scripts/renew-certificates.sh, and start forgeframe-public.service plus forgeframe-acme.timer"
+fi

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from time import monotonic, sleep
@@ -305,16 +306,33 @@ class ExecutionTransitionService:
         self._state_machine_validator_factory = state_machine_validator_factory or self._build_state_machine_validator
         self._state_machine_validation_logger = validation_logger or _LOGGER
 
+    _thread_local_validator: threading.local = threading.local()
+
     @staticmethod
     def _build_state_machine_validator() -> _StateMachineValidator:
-        """Build a fresh enabled state-machine validator.
+        """Return a per-thread cached enabled state-machine validator.
+
+        Reuses the ``transitions.Machine`` instances across validation calls
+        within the same thread by resetting the adapter model state before
+        each use. This eliminates the per-validation overhead of constructing
+        two ``Machine`` objects (each with ~20 states and ~30 transitions).
+
+        Thread safety: each thread gets its own validator instance via
+        ``threading.local()``.  The adapter model is fully re-initialised
+        at the start of ``check_transition_allowed`` so no state leaks
+        between validation calls.
 
         Used by both authoritative pre-checks and advisory monitoring paths.
 
-        :return: Enabled validator instance for one service validation call.
+        :return: Cached per-thread validator instance.
         :rtype: _StateMachineValidator
         """
-        return ExecutionStateMachineValidator(enabled=True)
+        try:
+            validator: _StateMachineValidator = ExecutionTransitionService._thread_local_validator.instance
+        except AttributeError:
+            validator = ExecutionStateMachineValidator(enabled=True)
+            ExecutionTransitionService._thread_local_validator.instance = validator
+        return validator
 
     @staticmethod
     def _now(now: datetime | None = None) -> datetime:

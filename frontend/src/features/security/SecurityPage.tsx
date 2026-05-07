@@ -869,7 +869,7 @@ export function SecurityPage() {
         <PageHeader
           eyebrow="Governance"
           title="Security"
-          description="Privilege posture, exception workflow, session controls, provider secret governance, and credential policy."
+          description="Privilege posture, session controls, and credential policy."
           badges={[{ label: "Checking access", tone: "neutral" }]}
         >
           <p className="ff-page-header-support">Do you need elevated access controls or broader privileged security posture once the current session is known?</p>

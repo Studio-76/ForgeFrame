@@ -73,31 +73,31 @@ export function SettingsPage() {
   ).length;
 
   const readOnlyDescription = !sessionReady
-    ? "The page is checking the current session role before exposing any mutable system configuration controls."
+    ? "Checking session role before exposing configuration controls."
     : session?.role === "admin" && session?.read_only === true
-      ? "This admin session is read-only. You can review effective values, defaults, source, and risk, but you cannot save overrides or reset defaults."
-      : "Authenticated non-admin sessions can review grouped system defaults here. Saving overrides and resetting defaults remain admin-only operations.";
+      ? "Read-only session: review values, defaults, and source but cannot save overrides."
+      : "Non-admin session: review-only. Admin access required to save overrides.";
 
   return (
     <section className="fg-page">
       <PageIntro
         eyebrow="Settings"
         title="System Settings"
-        description="Review and manage environment-level configuration defaults. Each setting shows its effective value, source, risk, and override status."
+        description="Review and manage environment-level configuration defaults."
         question={canMutate
-          ? "Review the current operating defaults before making changes. High-risk settings require explicit confirmation."
-          : "Review grouped effective values, defaults, and override posture. Edit controls are available to admin sessions."}
+          ? "Review defaults before making changes. High-risk settings require confirmation."
+          : "Review-only. Edit controls available to admin sessions."}
         links={[
           {
             label: "System Settings",
             to: CONTROL_PLANE_ROUTES.settings,
-            description: "Inspect grouped effective values, defaults, source, and override posture.",
+            description: "Grouped values, defaults, source, and override posture.",
             badge: canMutate ? undefined : "Read only",
           },
           {
             label: "Usage & Costs",
             to: CONTROL_PLANE_ROUTES.usage,
-            description: "Cross-check whether a runtime or routing change is reacting to traffic, spend, or alerts.",
+            description: "Cross-check changes with traffic, spend, or alerts.",
           },
           {
             label: "Accounts",

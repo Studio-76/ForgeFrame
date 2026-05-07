@@ -46,16 +46,16 @@ def test_host_env_example_defaults_to_normative_public_https_contract() -> None:
 
 
 def test_bootstrap_driver_wires_public_https_services_before_normative_smoke() -> None:
-    bootstrap_script = (ROOT / "scripts" / "bootstrap-forgeframe.sh").read_text(encoding="utf-8")
+    bootstrap_script = (ROOT / "deploy" / "scripts" / "bootstrap-forgeframe.sh").read_text(encoding="utf-8")
 
     assert "forgeframe-http-helper.service" in bootstrap_script
-    assert 'bash "$ROOT_DIR/scripts/renew-certificates.sh"' in bootstrap_script
+    assert 'bash "$ROOT_DIR/deploy/scripts/renew-certificates.sh"' in bootstrap_script
     assert "forgeframe-public.service forgeframe-acme.timer" in bootstrap_script
     assert "Normative bootstrap path is blocked" in bootstrap_script
 
 
 def test_guided_host_install_driver_collects_login_inputs_and_reassigns_non_public_ports() -> None:
-    install_script = (ROOT / "scripts" / "install-forgeframe.sh").read_text(encoding="utf-8")
+    install_script = (ROOT / "deploy" / "scripts" / "install-forgeframe.sh").read_text(encoding="utf-8")
 
     assert "--guided" in install_script
     assert "Public HTTPS stays fixed on 443" in install_script
@@ -93,13 +93,13 @@ def test_guided_host_install_driver_collects_login_inputs_and_reassigns_non_publ
     assert "npm install" in install_script
     assert "start_guided_runtime_services" in install_script
     assert "forgeframe-api.service forgeframe-worker.service" in install_script
-    assert 'bash "$INSTALL_ROOT/scripts/renew-certificates.sh"' in install_script
-    assert 'bash "$INSTALL_ROOT/scripts/host-smoke.sh"' in install_script
-    assert "Frontend login:" in (ROOT / "scripts" / "bootstrap-forgeframe.sh").read_text(encoding="utf-8")
+    assert 'bash "$INSTALL_ROOT/deploy/scripts/renew-certificates.sh"' in install_script
+    assert 'bash "$INSTALL_ROOT/deploy/scripts/host-smoke.sh"' in install_script
+    assert "Frontend login:" in (ROOT / "deploy" / "scripts" / "bootstrap-forgeframe.sh").read_text(encoding="utf-8")
 
 
 def test_host_smoke_defaults_to_public_https_origin_and_same_origin_checks() -> None:
-    host_smoke_script = (ROOT / "scripts" / "host-smoke.sh").read_text(encoding="utf-8")
+    host_smoke_script = (ROOT / "deploy" / "scripts" / "host-smoke.sh").read_text(encoding="utf-8")
 
     assert "printf 'https://%s\\n' \"$FORGEFRAME_PUBLIC_FQDN\"" in host_smoke_script
     assert "Normative host smoke requires FORGEFRAME_PUBLIC_TLS_MODE=integrated_acme" in host_smoke_script

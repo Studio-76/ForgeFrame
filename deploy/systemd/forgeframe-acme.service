@@ -10,7 +10,7 @@ User=root
 Group=root
 WorkingDirectory=@@INSTALL_ROOT@@
 Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
-ExecStart=@@INSTALL_ROOT@@/scripts/renew-certificates.sh
+ExecStart=@@INSTALL_ROOT@@/deploy/scripts/renew-certificates.sh
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true

@@ -129,13 +129,7 @@ export function PluginsPage() {
 
   // ── Scope selector dialog ──
   const scopeSelectorContent = showScopeSelector ? (
-    <div className="fg-card">
-      <div className="fg-panel-heading">
-        <div>
-          <h3>Active instance scope</h3>
-          <p className="fg-muted">Instance activation is separate from registry truth. Choose the scope first, then decide whether to review catalog, manifest, or binding.</p>
-        </div>
-      </div>
+    <div className="p-3 border border-border rounded-md bg-surface mb-3">
       <div className="fg-inline-form">
         <label>
           Plugin instance
@@ -157,7 +151,7 @@ export function PluginsPage() {
             ))}
           </select>
         </label>
-        <Button variant="tertiary" onPress={() => setShowScopeSelector(false)}>
+        <Button variant="tertiary" density="compact" onPress={() => setShowScopeSelector(false)}>
           Close
         </Button>
       </div>
@@ -293,7 +287,7 @@ export function PluginsPage() {
     <RegistryManagementPage
       eyebrow="Extensions"
       title="Plugins"
-      description="Plugins are ForgeFrame's extension registry: catalog, manifest contract, per-instance activation, config contract, extension slots, audit posture, and security review."
+      description="Extension registry: catalog, manifest, per-instance activation."
       scope={scopeConfig}
       summaryItems={summaryItems}
       actions={[

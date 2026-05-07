@@ -328,12 +328,10 @@ describe("Harness page separation", () => {
       }),
     );
 
-    // Navigation links are now <Button variant="navigation"> (no href).
-    // Verify that scoped nav labels render in the markup.
+    // Diagnostics are present but lazy-rendered until expanded.
     expect(markup).toContain("Harness");
-    expect(markup).toContain("Setup progress");
-    expect(markup).toContain("Providers");
-    expect(markup).toContain("Logs");
+    expect(markup).toContain("Harness diagnostics");
+    expect(markup).not.toContain("Setup progress");
   });
 
   it("only shows mutating harness controls on the instance that grants write access", () => {

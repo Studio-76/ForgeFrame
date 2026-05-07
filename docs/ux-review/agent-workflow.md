@@ -432,7 +432,7 @@ docs/ux-review/resolved-2026-05-05-skills.md
 
 ## Validation Script
 
-A validation script is provided at `scripts/validate-ux-annotation.mjs`
+A validation script is provided at `deploy/scripts/validate-ux-annotation.mjs`
 (requires **Node.js 14+**).
 It checks exported annotation JSON files for structural correctness.
 
@@ -440,10 +440,10 @@ It checks exported annotation JSON files for structural correctness.
 
 ```bash
 # Validate a single file
-node scripts/validate-ux-annotation.mjs docs/ux-review/ux-review-2026-05-05-skills.json
+node deploy/scripts/validate-ux-annotation.mjs docs/ux-review/ux-review-2026-05-05-skills.json
 
 # Validate all files in the directory
-node scripts/validate-ux-annotation.mjs docs/ux-review/*.json
+node deploy/scripts/validate-ux-annotation.mjs docs/ux-review/*.json
 ```
 
 ### What it checks

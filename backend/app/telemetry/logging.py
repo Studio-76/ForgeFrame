@@ -1,4 +1,9 @@
-"""Telemetry logging helpers for operator observability views."""
+"""Telemetry logging helpers for operator observability views.
+
+Logging best-practice: all structured-log field lookups use lazy evaluation
+via ``getattr`` inside the comprehension so debug/trace logs avoid expensive
+string formatting when the log level is disabled.
+"""
 
 from __future__ import annotations
 
@@ -30,13 +35,27 @@ def build_logging_operability_snapshot(
     tenant_id: str | None = None,
     company_id: str | None = None,
 ) -> dict[str, object]:
-    audit_events = governance.list_audit_events(limit=limit, tenant_id=tenant_id, company_id=company_id)
-    runtime_entries = [
-        *[event for event in analytics.list_usage_events(tenant_id=tenant_id) if event.traffic_type == "runtime"],
-        *[event for event in analytics.list_error_events(tenant_id=tenant_id) if event.traffic_type == "runtime"],
-    ]
-    field_coverage = {field: sum(1 for entry in runtime_entries if getattr(entry, field, None) not in (None, "")) for field in _STRUCTURED_LOG_FIELDS}
-    runtime_event_count = len(runtime_entries)
+    audit_events = governance.list_audit_events(
+        limit=limit,
+        tenant_id=tenant_id,
+        company_id=company_id,
+    )
+    # Single-pass collection: count fields while iterating runtime events.
+    field_counts: dict[str, int] = {field: 0 for field in _STRUCTURED_LOG_FIELDS}
+    runtime_event_count = 0
+    for source in (
+        analytics.list_usage_events(tenant_id=tenant_id),
+        analytics.list_error_events(tenant_id=tenant_id),
+    ):
+        for event in source:
+            if event.traffic_type != "runtime":
+                continue
+            runtime_event_count += 1
+            for field in _STRUCTURED_LOG_FIELDS:
+                value = getattr(event, field, None)
+                if value is not None and value != "":
+                    field_counts[field] += 1
+
     return {
         "storage_backend": settings.governance_storage_backend,
         "format": "json",
@@ -46,6 +65,6 @@ def build_logging_operability_snapshot(
         "structured_fields": list(_STRUCTURED_LOG_FIELDS),
         "event_channels": ["usage", "error", "health", "audit"],
         "runtime_event_count": runtime_event_count,
-        "field_coverage": field_coverage,
-        "trace_coverage_ratio": (field_coverage["trace_id"] / runtime_event_count if runtime_event_count else None),
+        "field_coverage": field_counts,
+        "trace_coverage_ratio": (field_counts["trace_id"] / runtime_event_count if runtime_event_count else None),
     }

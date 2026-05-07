@@ -16,7 +16,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    create_engine,
     select,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -27,6 +26,7 @@ from app.harness.models import (
     HarnessProfileRecord,
     HarnessVerificationRun,
 )
+from app.storage.db import build_postgres_engine
 
 _SCHEMA_VERSION = 4
 
@@ -466,9 +466,7 @@ class FileHarnessRepository:
 
 class PostgresHarnessRepository:
     def __init__(self, database_url: str):
-        if not database_url.startswith("postgresql"):
-            raise ValueError("PostgreSQL backend requires a postgresql:// URL.")
-        self._engine = create_engine(database_url, pool_pre_ping=True)
+        self._engine = build_postgres_engine(database_url)
         Base.metadata.create_all(self._engine)
         self._session_factory = sessionmaker(self._engine, autoflush=False, expire_on_commit=False)
 

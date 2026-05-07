@@ -394,7 +394,7 @@ describe("learning page", () => {
     expect(fetchLearningEventDetailMock).toHaveBeenCalledWith("learning_suggested", "instance_alpha");
 
     // Page description matches the Review Queue template
-    expect(container.textContent).toContain("Review learning suggestions");
+    expect(container.textContent).toContain("Review suggestions before they become memory");
 
     // Summary hero stats
     expect(container.textContent).toContain("Total events");
@@ -468,7 +468,7 @@ describe("learning page", () => {
 
     let manualScope = getManualFormScope();
     expect(manualScope, "Manual form article should be in DOM").toBeTruthy();
-    expect(manualScope?.classList.contains("ff-learning-tron-frame")).toBe(true);
+    expect(manualScope?.classList.contains("ff-frame-accent")).toBe(true);
     expect(container.textContent).toContain("Manual learning intake");
     expect(container.textContent).toContain("Draft intake");
     expect(container.querySelector(".ff-learning-manual-header")).toBeTruthy();

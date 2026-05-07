@@ -43,7 +43,7 @@ vi.mock("../src/api/admin/instances", async () => {
 
 import type { AdminSessionUser, IngressTlsStatusResponse } from "../src/api/domain";
 import { IngressTlsPage } from "../src/pages/IngressTlsPage";
-import { withAppContext } from "./testContext";
+import { expandDetailsBySummary, withAppContext } from "./testContext";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -532,6 +532,11 @@ describe("ingress and tls page", () => {
 
     expect(renewIngressTlsMock).toHaveBeenCalled();
     expect(container.textContent).toContain("Last renew operation");
+    await act(async () => {
+      expandDetailsBySummary(container, "Renew operation output");
+    });
+    await flushEffects();
+
     expect(container.textContent).toContain("renewed certificates");
     expect(container.textContent).toContain("Production-ready");
   });

@@ -40,110 +40,15 @@ The project is under active development.
 
 ## Installation
 
-### Unified Installer (Recommended)
-
-The interactive installer walks through deployment options and dependencies:
+Use the unified installer:
 
 ```bash
 git clone <your-repo-url>
 cd ForgeFrame
-./scripts/forgeframe-setup.sh
+./deploy/scripts/forgeframe-setup.sh
 ```
 
-Select your deployment mode:
-
-- **Docker Compose** — production-like container deployment
-- **Host-native (systemd)** — production deployment with system services
-- **Dev environment** — local development with venv and npm
-- **Limited exception (file/SQLite)** — minimal storage for evaluation
-
-The installer uses [charmbracelet/gum](https://github.com/charmbracelet/gum) for the interactive terminal UI. Gum is installed automatically on Ubuntu/Debian when running interactively. Use `--non-interactive` for CI/CD.
-
-#### Non-interactive / CI/CD
-
-```bash
-./scripts/forgeframe-setup.sh --compose --non-interactive \
-  --fqdn forgeframe.example.com \
-  --acme-email admin@example.com \
-  --pg-password "$(openssl rand -base64 24)"
-```
-
-#### Quick mode flags
-
-```bash
-# Skip the mode selection menu
-./scripts/forgeframe-setup.sh --compose
-./scripts/forgeframe-setup.sh --host-native
-./scripts/forgeframe-setup.sh --dev
-./scripts/forgeframe-setup.sh --limited
-```
-
-### Manual Setup
-
-#### Clone
-
-```bash
-git clone <your-repo-url>
-cd ForgeFrame
-```
-
-#### Backend
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
-
-#### Frontend
-
-```bash
-cd ../frontend
-npm install
-```
-
-#### Environment
-
-```bash
-cd ..
-cp .env.example .env
-```
-
-Edit `.env` with your PostgreSQL connection and runtime configuration.
-
-### Quick Start (Dev)
-
-Run the backend and frontend in separate terminals.
-
-**Backend:**
-
-```bash
-cd backend
-source .venv/bin/activate
-uvicorn app.main:app --reload
-```
-
-**Frontend:**
-
-```bash
-cd frontend
-npm run dev
-```
-
-Open the URL shown by Vite (typically `http://localhost:5173`).
-
-### Production
-
-Build the frontend bundle, then serve both the API and static assets:
-
-```bash
-cd frontend && npm run build
-cd ..
-./scripts/start-forgeframe.sh
-```
-
-Listens on `127.0.0.1:8080` by default. Override with `FORGEFRAME_HOST` and `FORGEFRAME_PORT`.
+For full setup and deployment modes, see [docs/installation.md](docs/installation.md).
 
 ## Project Structure
 
@@ -151,9 +56,7 @@ Listens on `127.0.0.1:8080` by default. Override with `FORGEFRAME_HOST` and `FOR
 backend/     FastAPI services and domain logic
 frontend/    React 19 SPA — operator interface
 docs/        Technical and operations documentation
-deploy/      Deployment configuration templates
-docker/      Container-related assets
-scripts/     Utility scripts
+deploy/      Deployment assets (env, systemd, docker, scripts)
 reference/   Architecture and design references
 ```
 
@@ -176,8 +79,12 @@ Run frontend commands from `frontend/` and backend commands from `backend/`.
 
 Additional documentation is maintained in `docs/`:
 
+- [Installation Guide](docs/installation.md) — local setup, installer modes, startup, and troubleshooting
+- [Configuration Reference](docs/configuration.md) — env files, required variables, runtime/TLS/provider settings
 - [Design Tokens & UI Guide](docs/frontend/UI-TOKENS.md) — colors, spacing, typography, dark/light theme
 - [UX Review Mode](docs/frontend/ux-review-mode.md) — Dev-only UI inspection, annotation, and export tool for reviewers
 - [Compactness Rules](docs/frontend/compactness-rules.md) — Layout density and visual-weight budget for operational pages
 - [Residual UX Anti-Pattern Catalog](docs/frontend/residual-ux-anti-pattern-catalog.md) — Common UI issues across pages
 - Generated TypeDoc: `cd frontend && npm run docs` → `docs/index.html`
+
+Legacy reference (historical): `reference/README_OLD.md`
