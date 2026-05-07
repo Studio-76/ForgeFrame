@@ -10,7 +10,7 @@ User=root
 Group=root
 WorkingDirectory=@@INSTALL_ROOT@@
 Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
-ExecStart=@@INSTALL_ROOT@@/scripts/start-public-forgeframe.sh
+ExecStart=@@INSTALL_ROOT@@/deploy/scripts/start-public-forgeframe.sh
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

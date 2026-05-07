@@ -448,7 +448,7 @@ beforeEach(() => {
       checked_at: "2026-04-23T08:31:00Z",
       checks: [
         { id: "postgres_url", ok: true, details: "FORGEFRAME_HARNESS_POSTGRES_URL" },
-        { id: "migration_runner", ok: true, details: "scripts/apply-storage-migrations.py" },
+        { id: "migration_runner", ok: true, details: "deploy/scripts/apply-storage-migrations.py" },
         { id: "public_https_listener", ok: false, details: "0.0.0.0:443;mode=local_only" },
         { id: "public_fqdn_tls_evidence", ok: false, details: "fqdn=missing;dns=missing;cert=missing;mode=local_only" },
         { id: "frontend_dist", ok: true, details: "frontend/dist/index.html" },

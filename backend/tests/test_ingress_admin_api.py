@@ -66,7 +66,7 @@ def _certificate_status(*, present: bool = True) -> TlsCertificateStatus:
 
 
 def _load_acme_helper_module():
-    script_path = Path(__file__).resolve().parents[2] / "scripts" / "serve-acme-http.py"
+    script_path = Path(__file__).resolve().parents[2] / "deploy" / "scripts" / "serve-acme-http.py"
     spec = importlib.util.spec_from_file_location("serve_acme_http", script_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None

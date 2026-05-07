@@ -402,7 +402,7 @@ UX Review Mode is **unavailable in production builds** by design:
 - `frontend/reference/residual-ux-anti-pattern-catalog.md` — common UI anti-patterns to annotate
 - `docs/ux-review/agent-workflow.md` — agent workflow for fixing exported annotations
 - `docs/ux-review/annotation-schema.json` — JSON Schema for annotation export validation
-- `scripts/validate-ux-annotation.mjs` — validation script for exported annotation files
+- `deploy/scripts/validate-ux-annotation.mjs` — validation script for exported annotation files
 - Generated TypeDoc: `npm run docs` then open `docs/index.html`
 
 ## Agent Workflow Integration

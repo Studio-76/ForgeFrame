@@ -47,7 +47,7 @@ The interactive installer walks through deployment options and dependencies:
 ```bash
 git clone <your-repo-url>
 cd ForgeFrame
-./scripts/forgeframe-setup.sh
+./deploy/scripts/forgeframe-setup.sh
 ```
 
 Select your deployment mode:
@@ -62,7 +62,7 @@ The installer uses [charmbracelet/gum](https://github.com/charmbracelet/gum) for
 #### Non-interactive / CI/CD
 
 ```bash
-./scripts/forgeframe-setup.sh --compose --non-interactive \
+./deploy/scripts/forgeframe-setup.sh --compose --non-interactive \
   --fqdn forgeframe.example.com \
   --acme-email admin@example.com \
   --pg-password "$(openssl rand -base64 24)"
@@ -72,10 +72,10 @@ The installer uses [charmbracelet/gum](https://github.com/charmbracelet/gum) for
 
 ```bash
 # Skip the mode selection menu
-./scripts/forgeframe-setup.sh --compose
-./scripts/forgeframe-setup.sh --host-native
-./scripts/forgeframe-setup.sh --dev
-./scripts/forgeframe-setup.sh --limited
+./deploy/scripts/forgeframe-setup.sh --compose
+./deploy/scripts/forgeframe-setup.sh --host-native
+./deploy/scripts/forgeframe-setup.sh --dev
+./deploy/scripts/forgeframe-setup.sh --limited
 ```
 
 ### Manual Setup
@@ -140,7 +140,7 @@ Build the frontend bundle, then serve both the API and static assets:
 ```bash
 cd frontend && npm run build
 cd ..
-./scripts/start-forgeframe.sh
+./deploy/scripts/start-forgeframe.sh
 ```
 
 Listens on `127.0.0.1:8080` by default. Override with `FORGEFRAME_HOST` and `FORGEFRAME_PORT`.
@@ -151,9 +151,7 @@ Listens on `127.0.0.1:8080` by default. Override with `FORGEFRAME_HOST` and `FOR
 backend/     FastAPI services and domain logic
 frontend/    React 19 SPA — operator interface
 docs/        Technical and operations documentation
-deploy/      Deployment configuration templates
-docker/      Container-related assets
-scripts/     Utility scripts
+deploy/      Deployment assets (env, systemd, docker, scripts)
 reference/   Architecture and design references
 ```
 

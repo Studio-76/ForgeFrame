@@ -11,7 +11,7 @@ Group=@@SYSTEM_GROUP@@
 WorkingDirectory=@@INSTALL_ROOT@@
 Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
 Environment=FORGEFRAME_RUNTIME_MODE=host_native
-ExecStart=@@INSTALL_ROOT@@/scripts/start-forgeframe.sh
+ExecStart=@@INSTALL_ROOT@@/deploy/scripts/start-forgeframe.sh
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

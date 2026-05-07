@@ -523,14 +523,14 @@ mypy app/                   # Type check
 
 ## 11) Release Validation
 
-5 automated validation scripts in `scripts/`:
+5 automated validation scripts in `deploy/scripts/`:
 1. `test-backend.sh` — pytest suite
 2. `test-frontend.sh` — frontend build + tests
 3. `compose-smoke.sh` — docker-compose boot + health check
 4. `compose-client-compat-signoff.sh` — OpenAI compat signoff
 5. `compose-backup-restore-smoke.sh` — backup/restore validation
 
-Run all: `scripts/release-validate.sh`
+Run all: `deploy/scripts/release-validate.sh`
 
 ---
 

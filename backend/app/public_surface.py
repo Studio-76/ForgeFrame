@@ -55,7 +55,7 @@ def resolve_repo_relative_path(repo_root: Path, configured_path: str) -> Path:
 
 
 def has_linux_host_installation_artifacts(repo_root: Path) -> bool:
-    install_script = repo_root / "scripts" / "install-forgeframe.sh"
+    install_script = repo_root / "deploy" / "scripts" / "install-forgeframe.sh"
     systemd_dir = repo_root / "deploy" / "systemd"
     required_paths = (
         install_script,
@@ -69,8 +69,8 @@ def has_linux_host_installation_artifacts(repo_root: Path) -> bool:
 
 def has_integrated_tls_automation(repo_root: Path) -> bool:
     required_paths = (
-        repo_root / "scripts" / "forgeframe-acme.sh",
-        repo_root / "scripts" / "renew-certificates.sh",
+        repo_root / "deploy" / "scripts" / "forgeframe-acme.sh",
+        repo_root / "deploy" / "scripts" / "renew-certificates.sh",
         repo_root / "deploy" / "systemd" / "forgeframe-acme.service",
         repo_root / "deploy" / "systemd" / "forgeframe-acme.timer",
     )

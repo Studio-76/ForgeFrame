@@ -910,7 +910,7 @@ A typical skill directory looks like this :
 
 my-skill/
 ├── SKILL.md #(Required) metadata & instructions.
-├── scripts/ # (Optional) Python or Bash scripts for execution.
+├── deploy/scripts/ # (Optional) Python or Bash scripts for execution.
 ├── references/ # (Optional) text, documentation, or templates.
 └── assets/ # (Optional) Images or logos.
 

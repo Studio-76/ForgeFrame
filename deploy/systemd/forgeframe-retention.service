@@ -10,7 +10,7 @@ User=@@SYSTEM_USER@@
 Group=@@SYSTEM_GROUP@@
 WorkingDirectory=@@INSTALL_ROOT@@
 Environment=FORGEFRAME_ENV_FILE=@@ENV_FILE@@
-ExecStart=@@INSTALL_ROOT@@/.venv/bin/python @@INSTALL_ROOT@@/scripts/run-history-retention.py --apply
+ExecStart=@@INSTALL_ROOT@@/.venv/bin/python @@INSTALL_ROOT@@/deploy/scripts/run-history-retention.py --apply
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true

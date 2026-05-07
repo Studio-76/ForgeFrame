@@ -37,10 +37,10 @@ class ControlPlaneBootstrapDomainMixin:
         root_dir = Path(__file__).resolve().parents[4]
         frontend_dist_path = resolve_repo_relative_path(root_dir, self._settings.frontend_dist_path)
         frontend_index = frontend_dist_path / "index.html"
-        host_install_script = root_dir / "scripts" / "install-forgeframe.sh"
-        host_smoke_script = root_dir / "scripts" / "host-smoke.sh"
-        host_backup_restore_smoke = root_dir / "scripts" / "host-backup-restore-smoke.sh"
-        upgrade_proof_script = root_dir / "scripts" / "recovery-upgrade-proof.py"
+        host_install_script = root_dir / "deploy" / "scripts" / "install-forgeframe.sh"
+        host_smoke_script = root_dir / "deploy" / "scripts" / "host-smoke.sh"
+        host_backup_restore_smoke = root_dir / "deploy" / "scripts" / "host-backup-restore-smoke.sh"
+        upgrade_proof_script = root_dir / "deploy" / "scripts" / "recovery-upgrade-proof.py"
         systemd_dir = root_dir / "deploy" / "systemd"
         host_env_template = root_dir / "deploy" / "env" / "forgeframe-host.env.example"
         ingress_status = build_ingress_tls_status(self._settings)
@@ -97,13 +97,15 @@ class ControlPlaneBootstrapDomainMixin:
             ),
             ControlPlaneBootstrapCheck(
                 id="migration_runner",
-                ok=(root_dir / "scripts" / "apply-storage-migrations.py").exists(),
-                details=str(root_dir / "scripts" / "apply-storage-migrations.py"),
+                ok=(root_dir / "deploy" / "scripts" / "apply-storage-migrations.py").exists(),
+                details=str(root_dir / "deploy" / "scripts" / "apply-storage-migrations.py"),
             ),
             ControlPlaneBootstrapCheck(
                 id="backup_restore_automation",
-                ok=((root_dir / "scripts" / "backup-forgeframe.sh").exists() and (root_dir / "scripts" / "restore-forgeframe.sh").exists() and host_backup_restore_smoke.exists()),
-                details="scripts/backup-forgeframe.sh + scripts/restore-forgeframe.sh + scripts/host-backup-restore-smoke.sh",
+                ok=(
+                    (root_dir / "deploy" / "scripts" / "backup-forgeframe.sh").exists() and (root_dir / "deploy" / "scripts" / "restore-forgeframe.sh").exists() and host_backup_restore_smoke.exists()
+                ),
+                details="deploy/scripts/backup-forgeframe.sh + deploy/scripts/restore-forgeframe.sh + deploy/scripts/host-backup-restore-smoke.sh",
             ),
             ControlPlaneBootstrapCheck(
                 id="upgrade_recovery_proof_driver",
@@ -207,12 +209,14 @@ class ControlPlaneBootstrapDomainMixin:
         ]
         ready = all(item.ok for item in checks)
         next_steps = [
-            "Run scripts/install-forgeframe.sh on the Linux host, populate forgeframe.env with reachable PostgreSQL URLs, and enable the installed systemd units.",
+            "Run deploy/scripts/install-forgeframe.sh on the Linux host, populate forgeframe.env with reachable PostgreSQL URLs, and enable the installed systemd units.",
             "Populate /etc/forgeframe/forgeframe.env with the real public FQDN, ACME operator email, reachable PostgreSQL URLs, and bootstrap credentials before enabling public services.",
-            "Enable forgeframe-http-helper.service, issue certificates with scripts/renew-certificates.sh, and then start forgeframe-public.service plus forgeframe-acme.timer on the Linux host.",
+            "Enable forgeframe-http-helper.service, issue certificates with "
+            "deploy/scripts/renew-certificates.sh, and then start "
+            "forgeframe-public.service plus forgeframe-acme.timer on the Linux host.",
             "Keep the operator UI on / and /v1 plus /admin on the same HTTPS origin; any HTTP-only or local-only exposure stays a classified exception, not the default product path.",
             "Treat compose/bootstrap scripts as an alternative path only; they no longer prove the normative Linux-host deployment.",
-            "Capture a pre-upgrade checkpoint with scripts/recovery-upgrade-proof.py before releases and import the post-upgrade no-loss report into Recovery / Backup / Restore.",
+            "Capture a pre-upgrade checkpoint with deploy/scripts/recovery-upgrade-proof.py before releases and import the post-upgrade no-loss report into Recovery / Backup / Restore.",
             "After the public HTTPS origin exists, rerun host-smoke plus host-backup-restore-smoke end to end.",
         ]
         return ControlPlaneBootstrapReadinessReport(
